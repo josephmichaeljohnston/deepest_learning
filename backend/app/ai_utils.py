@@ -7,11 +7,17 @@ import re
 import numpy as np
 
 from .models import Lecture, Slide
-from .prompts import lecture_intro_prompt, lecture_step_prompt
+from .prompts import answer_feedback_prompt, lecture_intro_prompt, lecture_step_prompt
 from .utils import load_slide_as_named_tempfile
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 pipeline = KPipeline(lang_code='a')
+
+
+class AnswerFeedback(BaseModel):
+    correct: bool
+    summary: str
+    hypothesis: str
 
 
 class SlideResponse(BaseModel):
@@ -36,6 +42,32 @@ def _split_into_sentences(text: str):
         return []
     sentences = re.split(r"(?<=[.!?])\s+", text)
     return [s.strip() for s in sentences if s.strip()]
+
+
+def get_answer_feedback(question: str, answer: str, hypothesis: str) -> dict:
+    """
+    Get feedback on an answer to a question and update the hypothesis of the student's understanding of the topic.
+
+    Args:
+        question: The question that was asked.
+        answer: The student's answer to the question.
+        hypothesis: The hypothesis of the student's understanding of the topic.
+
+    Returns:
+        A dictionary containing the correctness of the answer, a summary of the feedback, and the updated hypothesis.
+    """
+    prompt = answer_feedback_prompt(question, answer, hypothesis)
+    response = client.responses.parse(
+        model="gpt-5-mini",
+        input=prompt,
+        text_format=AnswerFeedback,
+    )
+    parsed_response = response.output_parsed
+    return {
+        "correct": parsed_response.correct,
+        "summary": parsed_response.summary,
+        "hypothesis": parsed_response.hypothesis,
+    }
 
 
 def lecture_step(lecture: Lecture, slide_num: int):
