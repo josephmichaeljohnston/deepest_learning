@@ -1,5 +1,6 @@
 from flask_restx import Api, Namespace, Resource, fields
 from flask import request
+from .ai_utils import lecture_step
 from .db import get_db
 from .models import Lecture, Slide
 from .handlers import process_step, answer_question
@@ -86,6 +87,18 @@ class StepResource(Resource):
             )
             if not slide:
                 api.abort(404, "slide not found")
+
+            lecture = db.query(Lecture).filter_by(id=lecture_id).first()
+            if not lecture:
+                api.abort(404, "lecture not found")
+
+            slide_text = lecture_step(lecture, slide_num)
+            slide = Slide(text=slide_text, slide_number=slide_num, lecture_id=lecture_id)
+            db.add(slide)
+            db.add(lecture)
+            db.commit()
+            db.refresh(lecture)
+
             return {
                 "id": lecture_id,
                 "slide": slide_num,
