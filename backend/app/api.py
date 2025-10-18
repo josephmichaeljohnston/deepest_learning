@@ -4,6 +4,8 @@ from .ai_utils import lecture_step
 from .db import get_db
 from .models import Lecture, Slide
 from .handlers import process_step, answer_question
+import os
+from werkzeug.utils import secure_filename
 
 api = Api(
     title="Deepest Learning API",
@@ -13,12 +15,12 @@ api = Api(
 )
 
 ns = Namespace("lectures", description="Lecture operations")
-api.add_namespace(ns, path="/")
+api.add_namespace(ns, path="")
 
 # models
 upload_model = api.parser()
 upload_model.add_argument(
-    "file", location="files", type="file", required=True, help="PDF file"
+    "file_obj", location="files", type="file", required=True, help="PDF file"
 )
 upload_model.add_argument(
     "text", location="form", type=str, required=False, help="Associated text"
@@ -40,27 +42,29 @@ answer_response = api.model(
     {"id": fields.Integer(), "slide": fields.Integer(), "answer": fields.String()},
 )
 
+UPLOAD_FOLDER = "uploads"  # Directory to store uploaded PDFs
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 
 @ns.route("/instantiate-lecture")
 class InstantiateLecture(Resource):
     @api.expect(upload_model)
     @api.response(201, "Created", lecture_response)
     def post(self):
-        args = upload_model.parse_args()
-        uploaded = args.get("file")
-        text = args.get("text")
-        if not uploaded:
+        uploaded_file = request.files.get("file_obj")
+        if not uploaded_file:
             api.abort(400, "file is required")
-        file = uploaded
-        filename = getattr(file, "filename", "uploaded.pdf")
-        data = file.read()
 
+        # Save the uploaded file locally
+        filename = secure_filename("uploaded.pdf")
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        uploaded_file.save(file_path)
+
+        # Store the file path in the database
         db_gen = get_db()
         db = next(db_gen)
         try:
-            lecture = Lecture(
-                title=filename, pdf_filename=filename, pdf_data=data, text=text
-            )
+            lecture = Lecture(title=filename, pdf_path=file_path)
             db.add(lecture)
             db.commit()
             db.refresh(lecture)
@@ -80,20 +84,22 @@ class StepResource(Resource):
         db_gen = get_db()
         db = next(db_gen)
         try:
-            slide = (
-                db.query(Slide)
-                .filter_by(lecture_id=lecture_id, slide_number=slide_num)
-                .first()
-            )
-            if not slide:
-                api.abort(404, "slide not found")
+            # slide = (
+            #     db.query(Slide)
+            #     .filter_by(lecture_id=lecture_id, slide_number=slide_num)
+            #     .first()
+            # )
+            # if not slide:
+            #     api.abort(404, "slide not found")
 
             lecture = db.query(Lecture).filter_by(id=lecture_id).first()
             if not lecture:
                 api.abort(404, "lecture not found")
 
             slide_text = lecture_step(lecture, slide_num)
-            slide = Slide(text=slide_text, slide_number=slide_num, lecture_id=lecture_id)
+            slide = Slide(
+                text=slide_text, slide_number=slide_num, lecture_id=lecture_id
+            )
             db.add(slide)
             db.add(lecture)
             db.commit()
