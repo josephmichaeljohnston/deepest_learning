@@ -1,6 +1,7 @@
 from openai import OpenAI
 import os
 from kokoro import KPipeline
+from pydantic import BaseModel
 import soundfile as sf
 import re
 import numpy as np
@@ -11,6 +12,12 @@ from .utils import load_slide_as_named_tempfile
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 pipeline = KPipeline(lang_code='a')
+
+
+class SlideResponse(BaseModel):
+    script: str
+    ask_question: bool
+    question: str
 
 
 def _split_into_sentences(text: str):
@@ -67,9 +74,12 @@ def lecture_step(lecture: Lecture, slide_num: int):
                     ],
                 },
             ],
+            text_format=SlideResponse,
         )
 
-        return response.output_text
+        script = response.output_parsed.script
+        question = response.output_parsed.question if response.output_parsed.ask_question else None
+        return {"script": script, "question": question}
 
     finally:
         if uploaded_slide is not None:
