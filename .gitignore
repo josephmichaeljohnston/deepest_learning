@@ -6,9 +6,11 @@ node_modules/
 # Testing
 /coverage
 
-# Next.js
+# Next.js (monorepo)
+# Ignore Next.js build outputs inside frontend app and accidental root builds
+frontend/.next/
+frontend/out/
 /.next/
-/out/
 
 # Production
 /build
@@ -31,108 +33,18 @@ yarn-error.log*
 
 # TypeScript
 *.tsbuildinfo
-next-env.d.ts
 
 # Uploads
-uploads/
+uploads/*
+!uploads/README.md
+!uploads/.gitkeep
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# Frontend uploaded files (runtime artifacts)
+frontend/uploads/*
+!frontend/next-env.d.ts
 
-# Virtual environments
-venv/
-env/
-ENV/
-env.bak/
-venv.bak/
-.venv/
-
-# Flask
-instance/
-.webassets-cache
-
-# FastAPI
-.pytest_cache/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-*.ipynb
-
-# PyCharm
+# Root Next.js env shim (should live inside frontend)
+/next-env.d.ts
+# Editor/IDE
 .idea/
-
-# VS Code
 .vscode/
-
-# AI/ML specific
-*.h5
-*.hdf5
-*.pkl
-*.pickle
-*.joblib
-*.pt
-*.pth
-*.ckpt
-*.safetensors
-*.onnx
-*.pb
-*.tflite
-*.mlmodel
-wandb/
-runs/
-logs/
-checkpoints/
-models/
-data/
-datasets/
-
-# Pytest
-.pytest_cache/
-.coverage
-htmlcov/
-
-# MyPy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre
-.pyre/
-
-# pytype
-.pytype/
-
-# Celery
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath
-*.sage.py
-
-# Spyder
-.spyderproject
-.spyproject
-
-# Rope
-.ropeproject

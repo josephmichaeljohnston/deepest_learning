@@ -24,6 +24,8 @@ interface PdfCarouselProps {
   onDocumentLoadError?: (error: Error) => void
   // Optional externally-controlled page navigation (1-based)
   externalPage?: number
+  // How to fit the page in the available space
+  fitMode?: 'height' | 'width'
 }
 
 const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
@@ -36,6 +38,7 @@ const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
       onDocumentLoadSuccess,
       onDocumentLoadError,
       externalPage,
+      fitMode = 'height',
     },
     ref
   ) => {
@@ -43,27 +46,60 @@ const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
     const [pageNumber, setPageNumber] = useState<number>(1)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [pageWidth, setPageWidth] = useState<number>(0)
-    const [containerHeight, setContainerHeight] = useState<number | null>(null)
-    const [containerWidth, setContainerWidth] = useState<number | null>(null)
+  const [pageHeight, setPageHeight] = useState<number | null>(null)
+  const [pageWidth, setPageWidth] = useState<number | null>(null)
     const [isTransitioning, setIsTransitioning] = useState(false)
-    const containerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const resizeTimeoutRef = useRef<number | null>(null)
+  const lastUpdateTimeRef = useRef<number>(0)
 
-    // Calculate optimal page width based on viewport
+    // Calculate page height based on available container height
     useEffect(() => {
-      const updatePageWidth = () => {
-        if (containerRef.current) {
-          // Get container width and subtract padding/margins
-          const containerWidth = containerRef.current.clientWidth
-          // Use 90% of viewport width, max 1200px for readability
-          const maxWidth = Math.min(containerWidth * 0.9, 1200)
-          setPageWidth(maxWidth)
-        }
+      const updateNow = () => {
+        if (!containerRef.current) return
+        const containerHeight = containerRef.current.clientHeight
+        const containerWidth = containerRef.current.clientWidth
+        const newHeight = Math.max(containerHeight - 12, 0) // 12px breathing room
+        const newWidth = Math.max(containerWidth - 12, 0)
+        setPageHeight((prev) => (prev !== newHeight ? newHeight : prev))
+        setPageWidth((prev) => (prev !== newWidth ? newWidth : prev))
+        lastUpdateTimeRef.current = performance.now()
       }
 
-      updatePageWidth()
-      window.addEventListener('resize', updatePageWidth)
-      return () => window.removeEventListener('resize', updatePageWidth)
+      const scheduleUpdate = () => {
+        const now = performance.now()
+        const elapsed = now - lastUpdateTimeRef.current
+
+        // Throttle immediate updates to at most ~6fps during animations
+        if (elapsed > 160) {
+          updateNow()
+        }
+
+        // Debounce a trailing update to settle at the final size after animations
+        if (resizeTimeoutRef.current) {
+          window.clearTimeout(resizeTimeoutRef.current)
+        }
+        resizeTimeoutRef.current = window.setTimeout(() => {
+          updateNow()
+        }, 180)
+      }
+
+      // Initial measurement
+      updateNow()
+
+      const resizeObserver = new ResizeObserver(() => {
+        scheduleUpdate()
+      })
+      if (containerRef.current) {
+        resizeObserver.observe(containerRef.current)
+      }
+
+      return () => {
+        resizeObserver.disconnect()
+        if (resizeTimeoutRef.current) {
+          window.clearTimeout(resizeTimeoutRef.current)
+        }
+      }
     }, [])
 
     // Expose methods to parent via ref for programmatic control
@@ -87,17 +123,6 @@ const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
       setError(null)
       onDocumentLoadSuccess?.(numPages)
       onPageChange?.(1, numPages)
-      
-      // Set initial container dimensions after first page loads
-      setTimeout(() => {
-        if (containerRef.current) {
-          const canvas = containerRef.current.querySelector('canvas')
-          if (canvas) {
-            setContainerHeight(canvas.offsetHeight)
-            setContainerWidth(canvas.offsetWidth)
-          }
-        }
-      }, 100)
     }
 
     const handleDocumentLoadError = (error: Error) => {
@@ -147,7 +172,7 @@ const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
       <div className="flex flex-col items-center justify-start w-full h-full overflow-hidden" ref={containerRef}>
         {/* PDF Document Display */}
         <div 
-          className="rounded-lg shadow-lg bg-white overflow-hidden transition-all duration-300 w-full h-full flex items-center justify-center"
+          className="rounded-lg shadow bg-white overflow-hidden w-full h-full flex items-center justify-center"
           style={{
             minHeight: '0',
             flex: '1 1 auto',
@@ -160,8 +185,7 @@ const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
             </div>
           ) : (
             <div 
-              className="transition-opacity duration-150 w-full h-full flex items-center justify-center overflow-hidden"
-              style={{ opacity: isTransitioning ? 0 : 1 }}
+              className="w-full h-full flex items-center justify-center overflow-auto"
             >
               <Document
                 file={pdfUrl}
@@ -178,8 +202,12 @@ const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
                   pageNumber={pageNumber}
                   renderTextLayer={false}
                   renderAnnotationLayer={false}
-                  width={Math.min(pageWidth, window.innerWidth - 32) || undefined}
-                  className="mx-auto max-w-full max-h-full object-contain"
+                  // Fit to selected mode
+                  {...(fitMode === 'height'
+                    ? { height: pageHeight ?? undefined }
+                    : { width: pageWidth ?? undefined }
+                  )}
+                  className="mx-auto"
                 />
               </Document>
             </div>

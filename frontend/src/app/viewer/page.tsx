@@ -174,8 +174,8 @@ function ViewerPageInner() {
           </button>
         </div>
 
-        {/* PDF Carousel - Most of viewport height */}
-        <div className="flex-1 px-4 flex flex-col min-h-0">
+        {/* PDF Carousel - Fill available space */}
+        <div className="flex-1 px-4 py-4 flex flex-col min-h-0 max-h-full">
           <PdfCarousel
             ref={pdfCarouselRef}
             pdfUrl={pdfUrl}
@@ -188,8 +188,8 @@ function ViewerPageInner() {
           />
         </div>
 
-        {/* Bottom section - Q&A Panel */}
-        <div className="px-4 py-2 flex flex-col">
+        {/* Bottom section - Q&A Panel with padding */}
+        <div className="px-4 py-4 flex flex-col items-center justify-center">
           <InlinePromptPanel ref={inlinePromptRef} agent={agent} />
         </div>
       </div>

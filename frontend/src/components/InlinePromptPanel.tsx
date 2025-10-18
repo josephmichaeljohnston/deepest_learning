@@ -114,22 +114,20 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
   }
 
   return (
-    <div className="w-full">
-      {/* Collapsed control bar */}
-      <div className="flex items-center justify-end">
-        {!open && (
-          <button
-            onClick={() => openPanelManually()}
-            className="px-3 py-1 rounded-lg bg-amber-600 text-white text-sm font-bold hover:bg-amber-700"
-          >
-            Ask a question
-          </button>
-        )}
-      </div>
+    <div className="w-full flex flex-col items-center">
+      {/* Collapsed control bar - Centered */}
+      {!open && (
+        <button
+          onClick={() => openPanelManually()}
+          className="px-6 py-3 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-700 transition-colors text-base"
+        >
+          Ask a question
+        </button>
+      )}
 
       {/* Sliding panel */}
       <div
-        className={`mt-3 overflow-hidden transition-all duration-300 ${open ? 'max-h-[320px] opacity-100' : 'max-h-0 opacity-0'}`}
+        className={`mt-3 overflow-hidden transition-all duration-300 w-full max-w-2xl ${open ? 'max-h-[320px] opacity-100' : 'max-h-0 opacity-0'}`}
       >
         <div className="rounded-xl border border-amber-200 bg-white">
           <div className="px-4 py-3 border-b">

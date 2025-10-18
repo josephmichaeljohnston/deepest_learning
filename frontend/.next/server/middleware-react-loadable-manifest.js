@@ -1,1 +1,0 @@
-self.__REACT_LOADABLE_MANIFEST="{\"app\\\\viewer\\\\page.tsx -> @/components/PdfCarousel\":{\"id\":\"app\\\\viewer\\\\page.tsx -> @/components/PdfCarousel\",\"files\":[\"static/chunks/_app-pages-browser_src_components_PdfCarousel_tsx.js\"]}}"
