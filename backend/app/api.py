@@ -6,6 +6,7 @@ from .models import Lecture, Slide
 from .handlers import process_step, answer_question
 import os
 from werkzeug.utils import secure_filename
+from .ai_utils import slide_to_speech
 
 api = Api(
     title="Deepest Learning API",
@@ -96,6 +97,12 @@ class StepResource(Resource):
             db.add(lecture)
             db.commit()
             db.refresh(lecture)
+
+            audio_filename = slide_to_speech(slide)
+            slide.audio_path = audio_filename
+            db.add(slide)
+            db.commit()
+            db.refresh(slide)
 
             return {
                 "id": lecture_id,
