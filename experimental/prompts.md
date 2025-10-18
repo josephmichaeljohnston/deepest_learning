@@ -50,3 +50,16 @@ Below, we have a lecture that is being delivered to a student and a hypothesis o
 </hypothesis>
 
 Ask the student a question about the content discussed in the later parts of the lecture that will help provide insight into their level of understanding. Make the question have a short written response. Only ask the question, nothing else.
+
+
+Prompt 4: Feedback on your answer (use structured outputs)
+
+Analyse the correctness of the following student's answer to a question, and provide a brief summary addressed to them on what they did well and what they could improve on.
+
+<question>
+What's the sum of 1 and 1?
+</question>
+
+<answer>
+3
+</answer>
