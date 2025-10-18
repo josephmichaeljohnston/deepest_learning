@@ -3,7 +3,7 @@ import os
 from kokoro import KPipeline
 import soundfile as sf
 
-from .models import Lecture
+from .models import Lecture, Slide
 from .prompts import lecture_intro_prompt, lecture_step_prompt
 from .utils import load_slide_as_named_tempfile
 
