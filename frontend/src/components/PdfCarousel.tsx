@@ -22,6 +22,8 @@ interface PdfCarouselProps {
   onPageChange?: (currentPage: number, totalPages: number) => void
   onDocumentLoadSuccess?: (numPages: number) => void
   onDocumentLoadError?: (error: Error) => void
+  // Optional externally-controlled page navigation (1-based)
+  externalPage?: number
 }
 
 const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
@@ -33,6 +35,7 @@ const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
       onPageChange,
       onDocumentLoadSuccess,
       onDocumentLoadError,
+      externalPage,
     },
     ref
   ) => {
@@ -115,6 +118,15 @@ const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
         }, 150)
       }
     }
+
+    // Respond to external page requests once document is loaded
+    useEffect(() => {
+      if (!externalPage || numPages === 0) return
+      if (externalPage !== pageNumber) {
+        changePage(externalPage)
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [externalPage, numPages])
 
     const handlePrevPage = () => {
       changePage(pageNumber - 1)

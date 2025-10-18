@@ -1,12 +1,17 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import dynamic from 'next/dynamic'
+import nextDynamic from 'next/dynamic'
 import type { PdfCarouselRef } from '@/components/PdfCarousel'
+import AgentControlPanel from '@/components/AgentControlPanel'
+import { useAgentController } from '@/lib/agent/useAgentController'
+import type { AgentSessionConfig } from '@/lib/agent/types'
+
+export const dynamic = 'force-dynamic'
 
 // Dynamically import PdfCarousel to avoid SSR issues
-const PdfCarousel = dynamic(() => import('@/components/PdfCarousel'), {
+const PdfCarousel = nextDynamic(() => import('@/components/PdfCarousel'), {
   ssr: false,
   loading: () => (
     <div className="flex flex-col items-center justify-center min-h-[600px]">
@@ -16,7 +21,7 @@ const PdfCarousel = dynamic(() => import('@/components/PdfCarousel'), {
   ),
 })
 
-export default function ViewerPage() {
+function ViewerPageInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pdfCarouselRef = useRef<PdfCarouselRef>(null)
@@ -28,9 +33,16 @@ export default function ViewerPage() {
   const [totalPages, setTotalPages] = useState(0)
   const [disableControls, setDisableControls] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-
-  // Example of programmatic control (for AI agent integration)
-  const [aiControlEnabled, setAiControlEnabled] = useState(false)
+  const [jumpPage, setJumpPage] = useState<string>('')
+  const [controlledPage, setControlledPage] = useState<number | undefined>(undefined)
+  
+  // Agent controller setup (simulated API plan + audio playback)
+  const agentBaseConfig = useMemo<AgentSessionConfig>(() => ({
+    filename: decodeURIComponent(filename || ''),
+    totalPages: totalPages || 0,
+    pdfUrl: pdfUrl || undefined,
+  }), [filename, totalPages, pdfUrl])
+  const agent = useAgentController(pdfCarouselRef, agentBaseConfig, { navigate: (p) => programmaticGoToPage(p) })
 
   useEffect(() => {
     // Redirect if no filename provided
@@ -76,46 +88,46 @@ export default function ViewerPage() {
     }
   }
 
-  // Programmatic control functions (for AI agent)
+  // Programmatic control functions (using carousel ref)
   const programmaticNextPage = () => {
-    pdfCarouselRef.current?.nextPage()
+    const ready = totalPages > 0 && !disableControls
+    if (!ready) {
+      console.log('ProgrammaticNext blocked:', { totalPages, disableControls })
+      return
+    }
+    setControlledPage(Math.min(currentPage + 1, totalPages))
   }
 
   const programmaticPrevPage = () => {
-    pdfCarouselRef.current?.prevPage()
+    const ready = totalPages > 0 && !disableControls
+    if (!ready) {
+      console.log('ProgrammaticPrev blocked:', { totalPages, disableControls })
+      return
+    }
+    setControlledPage(Math.max(currentPage - 1, 1))
   }
 
   const programmaticGoToPage = (page: number) => {
-    pdfCarouselRef.current?.goToPage(page)
+    const ready = totalPages > 0 && !disableControls
+    if (!ready) {
+      console.log('ProgrammaticGoTo blocked:', { page, totalPages, disableControls })
+      return
+    }
+    const clamped = Math.max(1, Math.min(page, totalPages))
+    setControlledPage(clamped)
   }
 
-  const simulateAiControl = async () => {
-    setAiControlEnabled(true)
-    setDisableControls(true)
-
-    // Example AI control sequence
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    programmaticGoToPage(1)
-    
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    programmaticNextPage()
-    
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    programmaticNextPage()
-    
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    programmaticGoToPage(1)
-
-    setDisableControls(false)
-    setAiControlEnabled(false)
-  }
+  // Disable manual controls while agent is busy
+  useEffect(() => {
+    const busy = ['fetching', 'navigating', 'playing'].includes(agent.state.status)
+    setDisableControls(busy)
+  }, [agent.state.status])
 
   if (!filename || !pdfUrl) {
     return null
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 py-12">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -126,6 +138,10 @@ export default function ViewerPage() {
                 ⚠️ Viewing locally (backend not ready)
               </p>
             )}
+            <div className="mt-2 text-sm flex items-center gap-2">
+              <span className={`inline-block w-2 h-2 rounded-full ${totalPages > 0 ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+              <span className="text-gray-600">Viewer {totalPages > 0 ? 'ready' : 'initializing'}</span>
+            </div>
           </div>
           
           <button
@@ -146,6 +162,7 @@ export default function ViewerPage() {
             onPageChange={handlePageChange}
             onDocumentLoadSuccess={handleDocumentLoad}
             onDocumentLoadError={handleDocumentLoadError}
+            externalPage={controlledPage}
           />
         </div>
 
@@ -172,16 +189,16 @@ export default function ViewerPage() {
             </div>
           )}
 
-          {/* Programmatic Control Panel */}
+          {/* Manual Programmatic Control Panel */}
           <div className="border-t pt-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Programmatic Controls (AI Agent Demo)
+              Programmatic Controls (Manual)
             </h3>
             
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={programmaticPrevPage}
-                disabled={aiControlEnabled || currentPage <= 1}
+                disabled={totalPages === 0 || disableControls || currentPage <= 1}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
               >
                 API: Previous Page
@@ -189,7 +206,7 @@ export default function ViewerPage() {
               
               <button
                 onClick={programmaticNextPage}
-                disabled={aiControlEnabled || currentPage >= totalPages}
+                disabled={totalPages === 0 || disableControls || currentPage >= totalPages}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
               >
                 API: Next Page
@@ -197,7 +214,7 @@ export default function ViewerPage() {
               
               <button
                 onClick={() => programmaticGoToPage(1)}
-                disabled={aiControlEnabled}
+                disabled={totalPages === 0 || disableControls}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
               >
                 API: Go to Page 1
@@ -208,31 +225,73 @@ export default function ViewerPage() {
                   const page = Math.ceil(totalPages / 2)
                   programmaticGoToPage(page)
                 }}
-                disabled={aiControlEnabled || totalPages < 2}
+                disabled={totalPages < 2 || disableControls}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
               >
                 API: Go to Middle
               </button>
-              
-              <button
-                onClick={simulateAiControl}
-                disabled={aiControlEnabled || totalPages < 2}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                {aiControlEnabled ? 'AI Control Active...' : 'Simulate AI Control'}
-              </button>
+
+              {/* Jump to arbitrary page */}
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2">
+                <label htmlFor="jumpPage" className="text-sm text-gray-700">Jump to</label>
+                <input
+                  id="jumpPage"
+                  type="number"
+                  min={1}
+                  max={totalPages || 1}
+                  value={jumpPage}
+                  onChange={(e) => setJumpPage(e.target.value)}
+                  disabled={totalPages === 0 || disableControls}
+                  placeholder="Page #"
+                  className="w-24 px-2 py-1 border border-gray-300 rounded text-center disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+                <button
+                  onClick={() => {
+                    const n = parseInt(jumpPage, 10)
+                    if (!isNaN(n)) {
+                      const clamped = Math.max(1, Math.min(n, totalPages))
+                      programmaticGoToPage(clamped)
+                    }
+                  }}
+                  disabled={totalPages === 0 || disableControls || jumpPage.trim() === ''}
+                  className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
+                >
+                  Go
+                </button>
+              </div>
             </div>
 
             <div className="mt-4 p-4 bg-blue-50 rounded-lg">
               <p className="text-sm text-gray-700">
-                <strong>For AI Integration:</strong> Use the ref methods (nextPage, prevPage, goToPage) 
-                to control the carousel programmatically. Controls can be disabled during AI operation 
-                using the <code className="bg-white px-1 rounded">disableControls</code> prop.
+                <strong>Manual Controls:</strong> Use the buttons above for ad-hoc navigation. When the Agent is active, manual controls are disabled. {(totalPages === 0) && (
+                  <span className="text-orange-700 ml-1">(Viewer not ready yet)</span>
+                )}
               </p>
             </div>
           </div>
+
+          {/* Agentic Controls */}
+          <AgentControlPanel agent={agent} ready={totalPages > 0} />
         </div>
       </div>
+  )
+}
+
+export default function ViewerPage() {
+  return (
+    <main className="min-h-screen bg-gray-50 py-12">
+      <Suspense
+        fallback={
+          <div className="container mx-auto px-4">
+            <div className="flex flex-col items-center justify-center min-h-[400px]">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <p className="mt-4 text-gray-600">Preparing viewer…</p>
+            </div>
+          </div>
+        }
+      >
+        <ViewerPageInner />
+      </Suspense>
     </main>
   )
 }
