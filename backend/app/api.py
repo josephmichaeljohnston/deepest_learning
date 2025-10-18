@@ -6,7 +6,7 @@ from .models import Lecture, Slide
 import os
 import mimetypes
 from werkzeug.utils import secure_filename
-from .ai_utils import slide_to_speech
+from .ai_utils import slide_to_speech, get_answer_feedback
 
 api = Api(
     title="Deepest Learning API",
