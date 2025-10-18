@@ -2,7 +2,7 @@ from openai import OpenAI
 import os
 from tempfile import NamedTemporaryFile
 
-from .models import Lecture, Slide
+from .models import Lecture
 from .prompts import lecture_intro_prompt, lecture_step_prompt
 from .utils import load_slide_as_named_tempfile
 

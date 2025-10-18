@@ -84,14 +84,6 @@ class StepResource(Resource):
         db_gen = get_db()
         db = next(db_gen)
         try:
-            # slide = (
-            #     db.query(Slide)
-            #     .filter_by(lecture_id=lecture_id, slide_number=slide_num)
-            #     .first()
-            # )
-            # if not slide:
-            #     api.abort(404, "slide not found")
-
             lecture = db.query(Lecture).filter_by(id=lecture_id).first()
             if not lecture:
                 api.abort(404, "lecture not found")
