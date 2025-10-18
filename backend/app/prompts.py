@@ -1,10 +1,10 @@
-def lecture_intro(student_context: str, understanding_context: str) -> str:
+def lecture_intro_prompt(student_hypothesis: str, lecture_hypothesis: str) -> str:
     """
     Generate a prompt for a university lecturer to give an introduction to a lecture.
 
     Args:
-        student_context: The general hypothesis of the student (aggregated over multiple lectures)
-        understanding_context: The specific hypothesis of student's understanding of this lectures content.
+        student_hypothesis: The general hypothesis of the student (aggregated over multiple lectures)
+        lecture_hypothesis: The specific hypothesis of student's understanding of this lectures content.
 
     Returns:
         A prompt for a university lecturer to give an introduction to a lecture.
@@ -17,12 +17,12 @@ We're also keeping track of some extra information, to help you tailor you're le
 
 *Context about the student you're teaching*
 <student context>
-{student_context}
+{student_hypothesis}
 </student context>
 
 *What the student understands about this topic*
 <understanding context>
-{understanding_context}
+{lecture_hypothesis}
 </understanding context>
 
 Attached is the first slide of your pdf presentation. Write a brief friendly introduction to the lecture. Make sure your keep your lecture conversational and engaging (avoid bullet points and lists where possible). Do not end your lecturing over this slide with a question or summary line.
@@ -30,14 +30,14 @@ Attached is the first slide of your pdf presentation. Write a brief friendly int
     )
 
 
-def lecture_step(lecture: str, student_context: str, understanding_context: str) -> str:
+def lecture_step_prompt(lecture: str, student_hypothesis: str, lecture_hypothesis: str) -> str:
     """
     Generate a prompt for a university lecturer to continue a lecture for the next slide.
 
     Args:
         lecture: The lecture so far.
-        student_context: The general hypothesis of the student (aggregated over multiple lectures)
-        understanding_context: The specific hypothesis of student's understanding of this lectures content.
+        student_hypothesis: The general hypothesis of the student (aggregated over multiple lectures)
+        lecture_hypothesis: The specific hypothesis of student's understanding of this lectures content.
 
     Returns:
         A prompt for a university lecturer to continue a lecture for the next slide.
@@ -53,12 +53,12 @@ We're also keeping track of some extra information, to help you tailor you're le
 
 *Context about the student you're teaching*
 <student context>
-{student_context}
+{student_hypothesis}
 </student context>
 
 *What the student understands about this topic*
 <understanding context>
-{understanding_context}
+{lecture_hypothesis}
 </understanding context>
 
 Attached is the next slide of your pdf presentation. Please continue your lecture from the exact point you left off to cover the content in this slide. Make sure your keep your lecture conversational and engaging (avoid bullet points and lists where possible). Do not end your lecturing over this slide with a question or summary line.
@@ -66,14 +66,14 @@ Attached is the next slide of your pdf presentation. Please continue your lectur
     )
 
 
-def question(lecture: str, student_context: str, understanding_context: str) -> str:
+def question_prompt(lecture: str, student_hypothesis: str, lecture_hypothesis: str) -> str:
     """
     Generate a prompt for a university lecturer to ask a question about the content of a lecture.
 
     Args:
         lecture: The lecture so far.
-        student_context: The general hypothesis of the student (aggregated over multiple lectures)
-        understanding_context: The specific hypothesis of student's understanding of this lectures content.
+        student_hypothesis: The general hypothesis of the student (aggregated over multiple lectures)
+        lecture_hypothesis: The specific hypothesis of student's understanding of this lectures content.
 
     Returns:
         A prompt for a university lecturer to ask a question about the content of a lecture.
@@ -87,11 +87,11 @@ Below, we have a lecture that is being delivered to a student and a hypothesis o
 </lecture>
 
 <student hypothesis>
-{student_context}
+{student_hypothesis}
 </student hypothesis>
 
 <understanding hypothesis>
-{understanding_context}
+{lecture_hypothesis}
 </understanding hypothesis>
 
 Ask the student a question about the content discussed in the later parts of the lecture that will help provide insight into their level of understanding. Make the question have a short written response. Only ask the question, nothing else.
@@ -99,7 +99,7 @@ Ask the student a question about the content discussed in the later parts of the
     )
 
 
-def answer_feedback(question: str, answer: str) -> str:
+def answer_feedback_prompt(question: str, answer: str) -> str:
     """
     Generate a prompt for a university lecturer to provide feedback on a student's answer to a question.
     NOTE: This prompt expects the use of structured outputs.
