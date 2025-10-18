@@ -1,14 +1,22 @@
 from openai import OpenAI
 import os
 
+from .models import Lecture, Slide
+from .prompts import lecture_intro_prompt, lecture_step_prompt
+from .utils import load_slide_as_named_tempfile
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def lecture_intro() -> str:
-    slide_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "Slide2.pdf"))
+def lecture_step(lecture: Lecture, slide_num: int):
+    """
+    Generate a step in a lecture and inplace update the lecture with the generated script.
 
-    uploaded_slide = None
-    with open(slide_path, "rb") as slide_file:
-        uploaded_slide = client.files.create(file=slide_file, purpose="assistants")
+    Args:
+        lecture: The lecture to generate a step for.
+        slide_num: The slide number to generate a step for.
+    """
+
+    uploaded_slide = client.files.create(file=load_slide_as_named_tempfile(lecture, slide_num), purpose="assistants")
 
     try:
         response = client.responses.create(
@@ -19,7 +27,7 @@ def lecture_intro() -> str:
                     "content": [
                         {
                             "type": "input_text",
-                            "text": prompt,
+                            "text": lecture_intro_prompt("", "") if slide_num == 1 else lecture_step_prompt(lecture.script, "", ""),  # TODO: add student and lecture hypotheses
                         },
                         {
                             "type": "input_file",
@@ -30,7 +38,8 @@ def lecture_intro() -> str:
             ],
         )
 
-        print(response.output_text)
+        return response.output_text
+
     finally:
         if uploaded_slide is not None:
             client.files.delete(uploaded_slide.id)
