@@ -6,6 +6,7 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: example
       MYSQL_DATABASE: deepest_learning
+      MYSQL_ROOT_HOST: '%'  # This allows root to connect from any host
     ports:
       - "3306:3306"
     volumes:
@@ -28,7 +29,8 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - ./:/app
 
