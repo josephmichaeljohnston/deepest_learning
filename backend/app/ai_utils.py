@@ -2,6 +2,8 @@ from openai import OpenAI
 import os
 from kokoro import KPipeline
 import soundfile as sf
+import re
+import numpy as np
 
 from .models import Lecture, Slide
 from .prompts import lecture_intro_prompt, lecture_step_prompt
@@ -9,6 +11,24 @@ from .utils import load_slide_as_named_tempfile
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 pipeline = KPipeline(lang_code='a')
+
+
+def _split_into_sentences(text: str):
+    """
+    Split text into sentences using simple punctuation rules.
+
+    Args:
+        text: The input text to split.
+
+    Returns:
+        A list of sentence strings.
+    """
+    # basic split on punctuation boundaries to avoid overloading tts with very long inputs
+    text = text.strip()
+    if not text:
+        return []
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    return [s.strip() for s in sentences if s.strip()]
 
 
 def lecture_step(lecture: Lecture, slide_num: int):
@@ -79,10 +99,24 @@ def slide_to_speech(slide: Slide):
 
     output_path = os.path.join(output_dir, f"{slide.id}.wav")
 
-    generator = pipeline(slide.script, voice="af_heart")
-    for i, (gs, ps, audio) in enumerate(generator):
-        print(i, gs, ps)
-        sf.write(output_path, audio, 24000)
+    # split script into sentences and synthesize one by one
+    sentences = _split_into_sentences(slide.script or "")
+    audio_chunks = []
+
+    for sentence in sentences:
+        generator = pipeline(sentence, voice="af_heart")
+        for i, (gs, ps, audio) in enumerate(generator):
+            print(i, gs, ps)
+            # ensure consistent dtype for concatenation
+            audio_chunks.append(np.asarray(audio, dtype=np.float32))
+
+    if audio_chunks:
+        full_audio = np.concatenate(audio_chunks)
+    else:
+        # fallback to tiny silence if nothing synthesized
+        full_audio = np.zeros(0, dtype=np.float32)
+
+    sf.write(output_path, full_audio, 24000)
 
     # return relative path for storage in database
     return os.path.relpath(output_path, backend_root)
