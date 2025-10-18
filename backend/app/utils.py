@@ -3,7 +3,9 @@ from PyPDF2 import PdfReader, PdfWriter
 from typing import BinaryIO
 import tempfile
 import os
+from tempfile import NamedTemporaryFile
 
+from .models import Lecture
 
 def load_slide(lecture, slide_number: int) -> BytesIO:
     """
@@ -49,18 +51,32 @@ def load_slide(lecture, slide_number: int) -> BytesIO:
     return output
 
 
-def load_slide_as_named_tempfile(lecture, slide_number: int):
+def load_slide_as_named_tempfile(lecture: Lecture, slide_num: int):
     """
-    Extract slide and return as NamedTemporaryFile.
-    File will be auto-deleted when closed or garbage collected.
+    Load a slide from the locally stored PDF file as a temporary file.
 
-    Returns a real file object identical to open(), but temporary.
+    Args:
+        lecture: The lecture containing the PDF file path.
+        slide_num: The slide number to load.
+
+    Returns:
+        A NamedTemporaryFile object containing the slide data.
     """
-    output_bytes = load_slide(lecture, slide_number)
+    if not lecture.pdf_path:
+        raise ValueError("Lecture does not have a valid PDF path.")
 
-    # delete=True means file is removed when closed
-    temp_file = tempfile.NamedTemporaryFile(mode="w+b", suffix=".pdf", delete=True)
-    temp_file.write(output_bytes.read())
-    temp_file.seek(0)  # Reset to beginning for reading
+    with open(lecture.pdf_path, "rb") as pdf_file:
+        reader = PdfReader(pdf_file)
+        
+        total_pages = len(reader.pages)
+        if slide_num < 1 or slide_num > total_pages:
+            raise ValueError(f"Slide number {slide_num} out of range (1-{total_pages})")
 
+        writer = PdfWriter()
+        writer.add_page(reader.pages[slide_num - 1])
+
+    temp_file = NamedTemporaryFile(delete=False, suffix=".pdf")
+    writer.write(temp_file)
+    temp_file.flush()
+    temp_file.close()
     return temp_file
