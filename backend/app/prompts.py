@@ -101,7 +101,7 @@ Ask the student a question about the content discussed in the later parts of the
     )
 
 
-def answer_feedback_prompt(question: str, answer: str) -> str:
+def answer_feedback_prompt(question: str, answer: str, hypothesis: str) -> str:
     """
     Generate a prompt for a university lecturer to provide feedback on a student's answer to a question.
     NOTE: This prompt expects the use of structured outputs.
@@ -109,6 +109,7 @@ def answer_feedback_prompt(question: str, answer: str) -> str:
     Args:
         question: The question that was asked.
         answer: The student's answer to the question.
+        hypothesis: The hypothesis of the student's understanding of the topic.
 
     Returns:
         A prompt for a university lecturer to provide feedback on a student's answer to a question.
@@ -116,6 +117,7 @@ def answer_feedback_prompt(question: str, answer: str) -> str:
     return (
 f"""
 Analyse the correctness of the following student's answer to a question, and provide a brief summary addressed to them on what they did well and what they could improve on.
+Also analyse how the student answers the question - does this change our hypothesis of the student's understanding of the topic? Provide the updated hypothesis.
 
 <question>
 {question}
@@ -124,5 +126,9 @@ Analyse the correctness of the following student's answer to a question, and pro
 <answer>
 {answer}
 </answer>
+
+<hypothesis>
+{hypothesis}
+</hypothesis>
 """
     )
