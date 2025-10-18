@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import nextDynamic from 'next/dynamic'
 import type { PdfCarouselRef } from '@/components/PdfCarousel'
 import AgentControlPanel from '@/components/AgentControlPanel'
+import InlinePromptPanel, { InlinePromptPanelHandle } from '@/components/InlinePromptPanel'
 import { useAgentController } from '@/lib/agent/useAgentController'
 import type { AgentSessionConfig } from '@/lib/agent/types'
 
@@ -25,6 +26,7 @@ function ViewerPageInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pdfCarouselRef = useRef<PdfCarouselRef>(null)
+  const inlinePromptRef = useRef<InlinePromptPanelHandle>(null)
   
   const filename = searchParams.get('file')
   const mode = searchParams.get('mode')
@@ -42,7 +44,24 @@ function ViewerPageInner() {
     totalPages: totalPages || 0,
     pdfUrl: pdfUrl || undefined,
   }), [filename, totalPages, pdfUrl])
-  const agent = useAgentController(pdfCarouselRef, agentBaseConfig, { navigate: (p) => programmaticGoToPage(p) })
+  // Memoize the agent controller options to ensure stable references
+  const agentOptions = useMemo(() => ({
+    navigate: (p: number) => {
+      console.log('[ViewerPage] navigate callback called for page:', p)
+      programmaticGoToPage(p)
+    },
+    onPrompt: (message?: string) => {
+      console.log('[ViewerPage] onPrompt callback called with message:', message)
+      console.log('[ViewerPage] inlinePromptRef.current:', inlinePromptRef.current)
+      inlinePromptRef.current?.prompt(message || 'Do you understand?')
+    }
+  }), [totalPages, currentPage])
+
+  const agent = useAgentController(
+    pdfCarouselRef,
+    agentBaseConfig,
+    agentOptions
+  )
 
   useEffect(() => {
     // Redirect if no filename provided
@@ -164,6 +183,10 @@ function ViewerPageInner() {
             onDocumentLoadError={handleDocumentLoadError}
             externalPage={controlledPage}
           />
+          {/* Reliable, inline slide-down prompt panel */}
+          <div className="mt-4">
+            <InlinePromptPanel ref={inlinePromptRef} agent={agent} />
+          </div>
         </div>
 
         {/* Status Display */}
