@@ -37,3 +37,16 @@ They understand the application and network layer very well, but have no underst
 </understanding context>
 
 Attached is the next slide of your pdf presentation. Please continue your lecture from the exact point you left off to cover the content in this slide. Make sure your keep your lecture conversational and engaging (avoid bullet points and lists where possible). Do not end your lecturing over this slide with a question or summary line.
+
+
+Prompt 3: Asking a question
+
+Below, we have a lecture that is being delivered to a student and a hypothesis of what we believe we know about the student.
+
+<lecture>
+</lecture>
+
+<hypothesis>
+</hypothesis>
+
+Ask the student a question about the content discussed in the later parts of the lecture that will help provide insight into their level of understanding. Make the question have a short written response. Only ask the question, nothing else.
