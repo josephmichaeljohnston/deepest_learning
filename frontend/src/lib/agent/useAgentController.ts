@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PdfCarouselRef } from '@/components/PdfCarousel'
-import { fetchAgentPlan } from './mockApi'
 import { fetchAgentPlanFromBackend } from './backendApi'
 import type { AgentControllerState, AgentSessionConfig, AgentStep } from './types'
 import { useAudioController } from '@/lib/audio/useAudioController'
@@ -135,11 +134,11 @@ export function useAgentController(
     if (!text) {
       setTtsActive(false)
       ttsActiveRef.current = false
-      return () => {}
+      return () => { }
     }
     try {
       const synth = window.speechSynthesis
-      if (!synth) return () => {}
+      if (!synth) return () => { }
       if (synth.speaking) synth.cancel()
       const utter = new SpeechSynthesisUtterance(text)
       // Keep a consistent rate for predictability
@@ -209,7 +208,7 @@ export function useAgentController(
     } catch {
       setTtsActive(false)
       ttsActiveRef.current = false
-      return () => {}
+      return () => { }
     }
   }, [startProgress, stopProgress])
 
@@ -228,7 +227,7 @@ export function useAgentController(
       cancelSpeech.current = speakText(step.ttsText || step.transcript, step.speakMs ?? 5000)
       // Optionally try audio as a subtle background beep if available
       // but we no longer rely on audio end to advance
-      audio.play(step.audioUrl).catch(() => {})
+      audio.play(step.audioUrl).catch(() => { })
     },
     [audio, navigateTo, speakText, stopProgress]
   )
@@ -238,7 +237,7 @@ export function useAgentController(
       // Clean up any prior run to ensure fresh state
       try {
         audio.stop()
-      } catch {}
+      } catch { }
       cancelSpeech.current?.()
       stopProgress()
       setProgress(0)
@@ -249,8 +248,8 @@ export function useAgentController(
 
       setState((s) => ({ ...s, status: 'fetching', error: undefined }))
       try {
-  const merged = { ...baseConfig, ...cfg }
-  const plan = merged.lectureId ? await fetchAgentPlanFromBackend(merged as any) : await fetchAgentPlan(merged)
+        const merged = { ...baseConfig, ...cfg }
+        const plan = await fetchAgentPlanFromBackend(merged as any)
         if (!plan.steps.length) throw new Error('No steps returned')
         // Initialize and let playStep handle navigation/progress; we only call it once here
         setState({ status: 'navigating', currentStepIndex: 0, steps: plan.steps })
@@ -267,7 +266,7 @@ export function useAgentController(
     try {
       const synth = window.speechSynthesis
       if (synth && synth.speaking && !synth.paused) synth.pause()
-    } catch {}
+    } catch { }
     // Pause fallback timer progress if running
     if (!ttsBoundarySeenRef.current) {
       if (progressPausedAt.current == null) {
@@ -301,7 +300,7 @@ export function useAgentController(
     try {
       const synth = window.speechSynthesis
       if (synth && synth.paused) synth.resume()
-    } catch {}
+    } catch { }
     // Resume fallback timer progress if boundary not available
     if (!ttsBoundarySeenRef.current) {
       if (progressPausedAt.current != null) {
@@ -353,36 +352,36 @@ export function useAgentController(
     if (isAdvancingRef.current) return
     isAdvancingRef.current = true
     console.log('[AutoAdvance] TRIGGERING - Progress complete and TTS ended')
-    ;(async () => {
-      // After each slide narration finishes, pause and prompt the user
-      console.log('[AutoAdvance] Pausing agent...')
-      try { pause() } catch (e) { console.error('[AutoAdvance] Pause error:', e) }
-      console.log('[AutoAdvance] Calling postSlidePromptRef.current?.("Do you understand?")')
-      console.log('[AutoAdvance] postSlidePromptRef.current exists:', !!postSlidePromptRef.current)
-      try {
-        postSlidePromptRef.current?.('Do you understand?')
-      } catch (e) { console.error('[AutoAdvance] Prompt callback error:', e) }
-      const next = state.currentStepIndex + 1
-      console.log('[AutoAdvance] Next index:', next, 'Total steps:', state.steps.length)
-      if (next < state.steps.length) {
-        nextAfterPromptRef.current = true
-        pendingNextIndexRef.current = next
-      } else {
-        // End of plan: behave like Stop for a fresh-ready state
-        stop()
-      }
-    })().finally(() => {
-      isAdvancingRef.current = false
-    })
+      ; (async () => {
+        // After each slide narration finishes, pause and prompt the user
+        console.log('[AutoAdvance] Pausing agent...')
+        try { pause() } catch (e) { console.error('[AutoAdvance] Pause error:', e) }
+        console.log('[AutoAdvance] Calling postSlidePromptRef.current?.("Do you understand?")')
+        console.log('[AutoAdvance] postSlidePromptRef.current exists:', !!postSlidePromptRef.current)
+        try {
+          postSlidePromptRef.current?.('Do you understand?')
+        } catch (e) { console.error('[AutoAdvance] Prompt callback error:', e) }
+        const next = state.currentStepIndex + 1
+        console.log('[AutoAdvance] Next index:', next, 'Total steps:', state.steps.length)
+        if (next < state.steps.length) {
+          nextAfterPromptRef.current = true
+          pendingNextIndexRef.current = next
+        } else {
+          // End of plan: behave like Stop for a fresh-ready state
+          stop()
+        }
+      })().finally(() => {
+        isAdvancingRef.current = false
+      })
   }, [progress, ttsActive, state.status, state.currentStepIndex, state.steps.length, pause, stop])
 
   // Hook up external prompt handler from opts
   useEffect(() => {
     console.log('[useAgentController] Setting up postSlidePromptRef with onPrompt callback:', !!opts?.onPrompt)
     postSlidePromptRef.current = opts?.onPrompt ?? null
-    return () => { 
+    return () => {
       console.log('[useAgentController] Cleaning up postSlidePromptRef')
-      postSlidePromptRef.current = null 
+      postSlidePromptRef.current = null
     }
   }, [opts?.onPrompt])
 

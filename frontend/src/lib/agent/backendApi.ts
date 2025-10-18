@@ -16,9 +16,6 @@ export async function fetchAgentPlanFromBackend(
   if (!lectureId) throw new Error('lectureId required for backend plan')
   if (!totalPages || totalPages < 1) throw new Error('totalPages must be known before starting the agent')
 
-  // Small delay to simulate planning time and keep UI consistent
-  await sleep(300)
-
   // Phase A: linear window
   const maxLinear = Math.min(5, Math.max(1, totalPages))
   const minLinear = Math.min(2, maxLinear)
