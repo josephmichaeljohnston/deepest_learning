@@ -1,6 +1,5 @@
 {
-  "/viewer/page": "app/viewer/page.js",
   "/page": "app/page.js",
-  "/api/upload/route": "app/api/upload/route.js",
-  "/api/pdf/[filename]/route": "app/api/pdf/[filename]/route.js"
+  "/api/pdf/[filename]/route": "app/api/pdf/[filename]/route.js",
+  "/viewer/page": "app/viewer/page.js"
 }

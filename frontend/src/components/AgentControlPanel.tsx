@@ -81,11 +81,6 @@ export default function AgentControlPanel({ agent, ready = true }: Props) {
                 style={{ width: `${Math.round(progress * 100)}%` }}
               />
             </div>
-            {typeof currentStep.speakMs === 'number' && (
-              <div className="text-xs text-gray-600 mt-1">
-                ~{Math.max(0, Math.ceil(((1 - progress) * currentStep.speakMs) / 1000))}s remaining
-              </div>
-            )}
           </div>
         )}
 
@@ -94,7 +89,7 @@ export default function AgentControlPanel({ agent, ready = true }: Props) {
             {state.steps.map((s, i) => (
               <button
                 key={`${s.page}-${i}`}
-                onClick={() => agent.skipTo(i)}
+                onClick={() => agent.jumpTo(i)}
                 className={`px-3 py-1 rounded border text-sm ${
                   i === state.currentStepIndex
                     ? 'bg-blue-600 text-white border-blue-600'

@@ -90,27 +90,27 @@ function ViewerPageInner() {
 
   // Programmatic control functions (using carousel ref)
   const programmaticNextPage = () => {
-    const ready = totalPages > 0 && !disableControls
+    const ready = totalPages > 0
     if (!ready) {
-      console.log('ProgrammaticNext blocked:', { totalPages, disableControls })
+      console.log('ProgrammaticNext blocked:', { totalPages })
       return
     }
     setControlledPage(Math.min(currentPage + 1, totalPages))
   }
 
   const programmaticPrevPage = () => {
-    const ready = totalPages > 0 && !disableControls
+    const ready = totalPages > 0
     if (!ready) {
-      console.log('ProgrammaticPrev blocked:', { totalPages, disableControls })
+      console.log('ProgrammaticPrev blocked:', { totalPages })
       return
     }
     setControlledPage(Math.max(currentPage - 1, 1))
   }
 
   const programmaticGoToPage = (page: number) => {
-    const ready = totalPages > 0 && !disableControls
+    const ready = totalPages > 0
     if (!ready) {
-      console.log('ProgrammaticGoTo blocked:', { page, totalPages, disableControls })
+      console.log('ProgrammaticGoTo blocked:', { page, totalPages })
       return
     }
     const clamped = Math.max(1, Math.min(page, totalPages))
