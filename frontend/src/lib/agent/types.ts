@@ -30,6 +30,7 @@ export interface AgentSessionConfig {
   totalPages: number
   strategy?: 'scripted' | 'linear' | 'random'
   pdfUrl?: string
+  lectureId?: number | string
 }
 
 export interface AgentControllerState {

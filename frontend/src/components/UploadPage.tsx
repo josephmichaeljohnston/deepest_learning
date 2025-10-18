@@ -21,6 +21,7 @@ export default function UploadPage() {
       const formData = new FormData()
       formData.append('file', fileToUpload)
 
+      // Save file to local uploads for viewing, and also forward to backend to create a Lecture
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
@@ -31,7 +32,28 @@ export default function UploadPage() {
       if (response.ok) {
         const duplicateMsg = data.isDuplicate ? ' (using existing file)' : ''
         setMessage(`File uploaded successfully${duplicateMsg}! Redirecting...`)
-        // Navigate to viewer page after successful upload
+        // In parallel, ask backend to instantiate this lecture
+        try {
+          const backendRes = await fetch('/api/backend/lectures/instantiate-lecture', {
+            method: 'POST',
+            body: formData,
+          })
+          if (backendRes.ok) {
+            const lecture = await backendRes.json()
+            // Navigate to viewer page after successful upload
+            setTimeout(() => {
+              try {
+                sessionStorage.setItem('pdfFileUrl', fileUrl)
+                sessionStorage.setItem('pdfFileName', fileToUpload.name)
+              } catch {}
+              router.push(`/viewer?file=${encodeURIComponent(data.filename)}&lecture=${encodeURIComponent(String(lecture.id))}`)
+            }, 500)
+            return
+          }
+        } catch (e) {
+          // Fall through to local mode
+        }
+        // Backend instantiate failed: still open viewer locally
         setTimeout(() => {
           // Also store local file info for potential fallback in viewer
           try {
@@ -39,7 +61,7 @@ export default function UploadPage() {
             sessionStorage.setItem('pdfFileName', fileToUpload.name)
           } catch {}
           // Prefer server-served filename; viewer will construct /api/pdf/<filename>
-          router.push(`/viewer?file=${encodeURIComponent(data.filename)}`)
+          router.push(`/viewer?file=${encodeURIComponent(data.filename)}&mode=local`)
         }, 500)
       } else {
         // If upload fails, still allow viewing with the local file

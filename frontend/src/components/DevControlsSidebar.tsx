@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AgentControllerApi } from '@/lib/agent/useAgentController'
 import AgentControlPanel from './AgentControlPanel'
+import { onApiLog, getApiLogs } from '@/lib/dev/apiLog'
 
 interface DevControlsSidebarProps {
   agent: AgentControllerApi
@@ -30,6 +31,19 @@ export default function DevControlsSidebar({
   setJumpPage,
 }: DevControlsSidebarProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [apiLogs, setApiLogs] = useState(() => getApiLogs())
+
+  // Subscribe to API log events
+  useEffect(() => {
+    const off = onApiLog((entry) => {
+      setApiLogs((prev) => {
+        const next = [...prev, entry]
+        if (next.length > 200) next.shift()
+        return next
+      })
+    })
+    return () => { off() }
+  }, [])
 
   return (
     <>
@@ -93,7 +107,7 @@ export default function DevControlsSidebar({
           </div>
 
           {/* Status Section */}
-          <div className="mb-6 pb-6 border-b">
+            <div className="mb-6 pb-6 border-b">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Status</h3>
             <div className="space-y-2 text-xs">
               <div>
@@ -114,6 +128,22 @@ export default function DevControlsSidebar({
               {agent.state.error && (
                 <div className="text-red-600 mt-2">{agent.state.error}</div>
               )}
+            </div>
+
+            {/* API Logs */}
+            <div className="mb-6 pb-6 border-b">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">API calls</h3>
+              <div className="space-y-1 max-h-48 overflow-auto text-xs font-mono">
+                {apiLogs.length === 0 && <div className="text-gray-500">No calls yet</div>}
+                {apiLogs.slice(-30).reverse().map((e) => (
+                  <div key={e.id} className="flex items-center gap-2">
+                    <span className={`px-1 rounded ${e.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{e.status ?? 'ERR'}</span>
+                    <span className="text-gray-700">{e.method}</span>
+                    <span className="truncate flex-1" title={e.url}>{e.url}</span>
+                    {typeof e.durationMs === 'number' && <span className="text-gray-500">{e.durationMs}ms</span>}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 

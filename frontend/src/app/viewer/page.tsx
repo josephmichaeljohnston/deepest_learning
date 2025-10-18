@@ -30,6 +30,7 @@ function ViewerPageInner() {
   
   const filename = searchParams.get('file')
   const mode = searchParams.get('mode')
+  const lectureId = searchParams.get('lecture')
   const [pdfUrl, setPdfUrl] = useState<string>('')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
@@ -43,6 +44,7 @@ function ViewerPageInner() {
     filename: decodeURIComponent(filename || ''),
     totalPages: totalPages || 0,
     pdfUrl: pdfUrl || undefined,
+    lectureId: lectureId ? Number(lectureId) : undefined,
   }), [filename, totalPages, pdfUrl])
   // Memoize the agent controller options to ensure stable references
   const agentOptions = useMemo(() => ({

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PdfCarouselRef } from '@/components/PdfCarousel'
 import { fetchAgentPlan } from './mockApi'
+import { fetchAgentPlanFromBackend } from './backendApi'
 import type { AgentControllerState, AgentSessionConfig, AgentStep } from './types'
 import { useAudioController } from '@/lib/audio/useAudioController'
 
@@ -248,7 +249,8 @@ export function useAgentController(
 
       setState((s) => ({ ...s, status: 'fetching', error: undefined }))
       try {
-        const plan = await fetchAgentPlan({ ...baseConfig, ...cfg })
+  const merged = { ...baseConfig, ...cfg }
+  const plan = merged.lectureId ? await fetchAgentPlanFromBackend(merged as any) : await fetchAgentPlan(merged)
         if (!plan.steps.length) throw new Error('No steps returned')
         // Initialize and let playStep handle navigation/progress; we only call it once here
         setState({ status: 'navigating', currentStepIndex: 0, steps: plan.steps })

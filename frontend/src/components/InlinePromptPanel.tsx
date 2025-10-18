@@ -89,7 +89,14 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
     setError(null)
     setResponse(null)
     try {
-      const res = await fetch('/api/qa', {
+      const url = new URL('/api/qa', window.location.origin)
+      // Try to pass context to backend
+      const search = new URLSearchParams(window.location.search)
+      const lecture = search.get('lecture')
+      const slide = String(agent.currentStep?.page ?? '')
+      if (lecture) url.searchParams.set('lecture', lecture)
+      if (slide) url.searchParams.set('slide', slide)
+      const res = await fetch(url.toString(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: value })
