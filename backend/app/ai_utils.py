@@ -1,12 +1,14 @@
 from openai import OpenAI
 import os
-from tempfile import NamedTemporaryFile
+from kokoro import KPipeline
+import soundfile as sf
 
 from .models import Lecture
 from .prompts import lecture_intro_prompt, lecture_step_prompt
 from .utils import load_slide_as_named_tempfile
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+pipeline = KPipeline(lang_code='a')
 
 
 def lecture_step(lecture: Lecture, slide_num: int):
@@ -58,3 +60,20 @@ def lecture_step(lecture: Lecture, slide_num: int):
                 os.unlink(temp.name)
         except Exception:
             pass
+
+
+def slide_to_speech(slide: Slide):
+    """
+    Generate a speech for a slide.
+
+    Args:
+        slide: The slide to generate a speech for.
+
+    Returns:
+        The path to the generated speech file.
+    """
+    generator = pipeline(slide.script, voice="af_heart")
+    for i, (gs, ps, audio) in enumerate(generator):
+        print(i, gs, ps)
+        sf.write(f"speech_outputs/{slide.id}.wav", audio, 24000)
+    return f"speech_outputs/{slide.id}.wav"
