@@ -144,14 +144,13 @@ const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
     }
 
     return (
-      <div className="flex flex-col items-center space-y-4 w-full" ref={containerRef}>
+      <div className="flex flex-col items-center justify-start w-full h-full overflow-hidden" ref={containerRef}>
         {/* PDF Document Display */}
         <div 
-          className="rounded-lg shadow-lg bg-white overflow-hidden transition-all duration-300"
+          className="rounded-lg shadow-lg bg-white overflow-hidden transition-all duration-300 w-full h-full flex items-center justify-center"
           style={{
-            minHeight: containerHeight ? `${containerHeight}px` : undefined,
-            minWidth: containerWidth ? `${containerWidth}px` : undefined,
-            maxWidth: containerWidth ? `${containerWidth}px` : undefined,
+            minHeight: '0',
+            flex: '1 1 auto',
           }}
         >
           {error ? (
@@ -161,7 +160,7 @@ const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
             </div>
           ) : (
             <div 
-              className="transition-opacity duration-150"
+              className="transition-opacity duration-150 w-full h-full flex items-center justify-center overflow-hidden"
               style={{ opacity: isTransitioning ? 0 : 1 }}
             >
               <Document
@@ -179,48 +178,15 @@ const PdfCarousel = forwardRef<PdfCarouselRef, PdfCarouselProps>(
                   pageNumber={pageNumber}
                   renderTextLayer={false}
                   renderAnnotationLayer={false}
-                  width={pageWidth || undefined}
-                  className="mx-auto"
+                  width={Math.min(pageWidth, window.innerWidth - 32) || undefined}
+                  className="mx-auto max-w-full max-h-full object-contain"
                 />
               </Document>
             </div>
           )}
         </div>
 
-        {/* Navigation Controls */}
-        {showControls && numPages > 0 && !error && (
-          <div className="flex items-center space-x-4 bg-gray-100 p-4 rounded-lg">
-            <button
-              onClick={handlePrevPage}
-              disabled={pageNumber <= 1 || disableControls}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              ← Previous
-            </button>
-
-            <div className="flex items-center space-x-2">
-              <span className="text-gray-700">Page</span>
-              <input
-                type="number"
-                min={1}
-                max={numPages}
-                value={pageNumber}
-                onChange={handleGoToPage}
-                disabled={disableControls}
-                className="w-16 px-2 py-1 border border-gray-300 rounded text-center disabled:bg-gray-100 disabled:cursor-not-allowed"
-              />
-              <span className="text-gray-700">of {numPages}</span>
-            </div>
-
-            <button
-              onClick={handleNextPage}
-              disabled={pageNumber >= numPages || disableControls}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              Next →
-            </button>
-          </div>
-        )}
+        {/* Navigation Controls removed - handled by parent page */}
       </div>
     )
   }

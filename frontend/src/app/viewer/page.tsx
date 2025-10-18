@@ -4,8 +4,8 @@ import { useRef, useState, useEffect, useMemo, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import nextDynamic from 'next/dynamic'
 import type { PdfCarouselRef } from '@/components/PdfCarousel'
-import AgentControlPanel from '@/components/AgentControlPanel'
 import InlinePromptPanel, { InlinePromptPanelHandle } from '@/components/InlinePromptPanel'
+import DevControlsSidebar from '@/components/DevControlsSidebar'
 import { useAgentController } from '@/lib/agent/useAgentController'
 import type { AgentSessionConfig } from '@/lib/agent/types'
 
@@ -147,32 +147,35 @@ function ViewerPageInner() {
   }
 
   return (
-      <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900">PDF Viewer</h1>
-            <p className="text-lg text-gray-600 mt-2">{decodeURIComponent(filename)}</p>
-            {mode === 'local' && (
-              <p className="text-sm text-orange-600 mt-1">
-                ⚠️ Viewing locally (backend not ready)
-              </p>
-            )}
-            <div className="mt-2 text-sm flex items-center gap-2">
-              <span className={`inline-block w-2 h-2 rounded-full ${totalPages > 0 ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-              <span className="text-gray-600">Viewer {totalPages > 0 ? 'ready' : 'initializing'}</span>
-            </div>
-          </div>
+      <div className="w-screen h-screen bg-gray-50 flex flex-col">
+        {/* Dev Controls Sidebar */}
+        <DevControlsSidebar
+          agent={agent}
+          ready={totalPages > 0}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          loadError={loadError}
+          programmaticNextPage={programmaticNextPage}
+          programmaticPrevPage={programmaticPrevPage}
+          programmaticGoToPage={programmaticGoToPage}
+          jumpPage={jumpPage}
+          setJumpPage={setJumpPage}
+        />
+
+        {/* Header - Centered title */}
+        <div className="flex justify-center items-center py-2 px-4 relative">
+          <h1 className="text-2xl font-bold text-gray-900">Deepest Learning</h1>
           
           <button
             onClick={() => router.push('/')}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            className="absolute right-4 px-3 py-1 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
           >
-            ← Back to Upload
+            ← Back
           </button>
         </div>
 
-        {/* PDF Carousel */}
-        <div className="mb-8">
+        {/* PDF Carousel - Most of viewport height */}
+        <div className="flex-1 px-4 flex flex-col min-h-0">
           <PdfCarousel
             ref={pdfCarouselRef}
             pdfUrl={pdfUrl}
@@ -183,118 +186,11 @@ function ViewerPageInner() {
             onDocumentLoadError={handleDocumentLoadError}
             externalPage={controlledPage}
           />
-          {/* Reliable, inline slide-down prompt panel */}
-          <div className="mt-4">
-            <InlinePromptPanel ref={inlinePromptRef} agent={agent} />
-          </div>
         </div>
 
-        {/* Status Display */}
-        <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            Document Information
-          </h2>
-          
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div>
-              <p className="text-gray-600">Current Page:</p>
-              <p className="text-2xl font-bold text-blue-600">{currentPage}</p>
-            </div>
-            <div>
-              <p className="text-gray-600">Total Pages:</p>
-              <p className="text-2xl font-bold text-blue-600">{totalPages}</p>
-            </div>
-          </div>
-
-          {loadError && (
-            <div className="p-4 rounded border border-yellow-300 bg-yellow-50 text-yellow-800 mb-4">
-              {loadError}. If you just uploaded the file, the server might still be warming up; we attempted a local fallback.
-            </div>
-          )}
-
-          {/* Manual Programmatic Control Panel */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Programmatic Controls (Manual)
-            </h3>
-            
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={programmaticPrevPage}
-                disabled={totalPages === 0 || disableControls || currentPage <= 1}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                API: Previous Page
-              </button>
-              
-              <button
-                onClick={programmaticNextPage}
-                disabled={totalPages === 0 || disableControls || currentPage >= totalPages}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                API: Next Page
-              </button>
-              
-              <button
-                onClick={() => programmaticGoToPage(1)}
-                disabled={totalPages === 0 || disableControls}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                API: Go to Page 1
-              </button>
-              
-              <button
-                onClick={() => {
-                  const page = Math.ceil(totalPages / 2)
-                  programmaticGoToPage(page)
-                }}
-                disabled={totalPages < 2 || disableControls}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                API: Go to Middle
-              </button>
-
-              {/* Jump to arbitrary page */}
-              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2">
-                <label htmlFor="jumpPage" className="text-sm text-gray-700">Jump to</label>
-                <input
-                  id="jumpPage"
-                  type="number"
-                  min={1}
-                  max={totalPages || 1}
-                  value={jumpPage}
-                  onChange={(e) => setJumpPage(e.target.value)}
-                  disabled={totalPages === 0 || disableControls}
-                  placeholder="Page #"
-                  className="w-24 px-2 py-1 border border-gray-300 rounded text-center disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-                <button
-                  onClick={() => {
-                    const n = parseInt(jumpPage, 10)
-                    if (!isNaN(n)) {
-                      const clamped = Math.max(1, Math.min(n, totalPages))
-                      programmaticGoToPage(clamped)
-                    }
-                  }}
-                  disabled={totalPages === 0 || disableControls || jumpPage.trim() === ''}
-                  className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
-                >
-                  Go
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm text-gray-700">
-                <strong>Manual Controls:</strong> Use the buttons above for ad-hoc navigation. When the Agent is active, manual controls are disabled. {(totalPages === 0) && (
-                  <span className="text-orange-700 ml-1">(Viewer not ready yet)</span>
-                )}
-              </p>
-            </div>
-          </div>
-
-          {/* Agentic Controls */}
-          <AgentControlPanel agent={agent} ready={totalPages > 0} />
+        {/* Bottom section - Q&A Panel */}
+        <div className="px-4 py-2 flex flex-col">
+          <InlinePromptPanel ref={inlinePromptRef} agent={agent} />
         </div>
       </div>
   )
@@ -302,7 +198,7 @@ function ViewerPageInner() {
 
 export default function ViewerPage() {
   return (
-    <main className="min-h-screen bg-gray-50 py-12">
+    <main className="w-screen h-screen bg-gray-50">
       <Suspense
         fallback={
           <div className="container mx-auto px-4">
