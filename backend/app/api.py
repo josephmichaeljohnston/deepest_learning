@@ -62,7 +62,11 @@ class InstantiateLecture(Resource):
         db_gen = get_db()
         db = next(db_gen)
         try:
-            lecture = Lecture(title=filename, pdf_path=file_path)
+            lecture = Lecture(
+                title=filename,
+                pdf_path=file_path,
+                lecture_hypothesis="We have no knowledge of the user's understanding",
+            )
             db.add(lecture)
             db.commit()
             db.refresh(lecture)
