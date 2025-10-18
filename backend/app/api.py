@@ -1,10 +1,11 @@
 from flask_restx import Api, Namespace, Resource, fields
-from flask import request
+from flask import request, send_file
 from .ai_utils import lecture_step
 from .db import get_db
 from .models import Lecture, Slide
 from .handlers import process_step, answer_question
 import os
+import mimetypes
 from werkzeug.utils import secure_filename
 from .ai_utils import slide_to_speech
 
@@ -130,3 +131,44 @@ class AnswerResource(Resource):
             "slide": slide_num,
             "answer": answer_question(lecture_id, slide_num, question),
         }
+
+
+@ns.route("/audio/<int:lecture_id>/<int:slide_num>")
+class AudioResource(Resource):
+    def get(self, lecture_id, slide_num):
+        db_gen = get_db()
+        db = next(db_gen)
+        try:
+            slide = (
+                db.query(Slide)
+                .filter_by(lecture_id=lecture_id, slide_number=slide_num)
+                .first()
+            )
+            if not slide:
+                api.abort(404, "slide not found")
+
+            audio_path = slide.audio_path
+            if not audio_path:
+                api.abort(404, "audio not available for this slide")
+
+            # resolve relative paths against backend root
+            if os.path.isabs(audio_path):
+                resolved_path = audio_path
+            else:
+                backend_root = os.path.dirname(os.path.dirname(__file__))
+                resolved_path = os.path.join(backend_root, audio_path)
+
+            if not os.path.isfile(resolved_path):
+                api.abort(404, "audio file not found")
+
+            mime_type, _ = mimetypes.guess_type(resolved_path)
+            return send_file(
+                resolved_path,
+                mimetype=mime_type or "application/octet-stream",
+                as_attachment=False,
+            )
+        finally:
+            try:
+                next(db_gen)
+            except StopIteration:
+                pass

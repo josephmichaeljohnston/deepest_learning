@@ -33,5 +33,6 @@ class Slide(Base):
     lecture_id = Column(Integer, ForeignKey("lectures.id"), nullable=False)
     slide_number = Column(Integer, nullable=False)
     script = Column(Text, nullable=True)
+    audio_path = Column(String(512), nullable=True)
 
     lecture = relationship("Lecture", back_populates="slides")
