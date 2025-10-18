@@ -24,9 +24,6 @@ upload_model = api.parser()
 upload_model.add_argument(
     "file_obj", location="files", type="file", required=True, help="PDF file"
 )
-upload_model.add_argument(
-    "text", location="form", type=str, required=False, help="Associated text"
-)
 
 lecture_response = api.model(
     "LectureCreateResponse",
