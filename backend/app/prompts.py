@@ -26,6 +26,7 @@ We're also keeping track of some extra information, to help you tailor you're le
 </understanding context>
 
 Attached is the first slide of your pdf presentation. Write a brief friendly introduction to the lecture. Make sure your keep your lecture conversational and engaging (avoid bullet points and lists where possible). Do not end your lecturing over this slide with a question or summary line.
+Also, if there is an appropriate technical question to ask, set ask_question to True and provide the question in the question field. Otherwise, set ask_question to False and leave the question field as an empty string.
 """
     )
 
@@ -62,6 +63,7 @@ We're also keeping track of some extra information, to help you tailor you're le
 </understanding context>
 
 Attached is the next slide of your pdf presentation. Please continue your lecture from the exact point you left off to cover the content in this slide. Make sure your keep your lecture conversational and engaging (avoid bullet points and lists where possible). Do not end your lecturing over this slide with a question or summary line.
+Also, if there is an appropriate technical question to ask, set ask_question to True and provide the question in the question field. Otherwise, set ask_question to False and leave the question field as an empty string.
 """
     )
 
