@@ -19,9 +19,9 @@ def create_app(test_config=None):
     # initialize database
     init_db(app)
 
-    # register routes
-    from .routes import bp as main_bp
+    # register flask-restx API (implements endpoints & Swagger UI)
+    from .api import api as restx_api
 
-    app.register_blueprint(main_bp)
+    restx_api.init_app(app)
 
     return app
