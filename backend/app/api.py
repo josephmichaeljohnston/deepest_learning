@@ -88,9 +88,18 @@ class StepResource(Resource):
                 api.abort(404, "lecture not found")
 
             slide_text = lecture_step(lecture, slide_num)
-            slide = Slide(
-                id=slide_num, script=slide_text, slide_number=slide_num, lecture_id=lecture_id
-            )
+
+            # if this slide number already exists for this lecture, overwrite it
+            slide = db.query(Slide).filter_by(lecture_id=lecture_id, slide_number=slide_num).first()
+            if slide:
+                slide.script = slide_text
+                db.add(slide)
+                db.commit()
+                db.refresh(slide)
+            else:
+                slide = Slide(
+                    script=slide_text, slide_number=slide_num, lecture_id=lecture_id
+                )
             db.add(slide)
             db.add(lecture)
             db.commit()
