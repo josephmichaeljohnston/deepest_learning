@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { AgentControllerApi } from '@/lib/agent/useAgentController'
 
 interface Props {
@@ -13,10 +13,18 @@ export default function AgentControlPanel({ agent, ready = true }: Props) {
   const disableStart = !ready || state.status === 'playing' || state.status === 'navigating' || state.status === 'fetching'
   const canPause = state.status === 'playing'
   const canResume = state.status === 'paused'
+  const [isBackend, setIsBackend] = useState(false)
+
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      setIsBackend(!!sp.get('lecture'))
+    } catch {}
+  }, [])
 
   return (
     <div className="border-t pt-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Agentic Controls (Simulated API)</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">{`Agentic Controls ${isBackend ? '(Backend)' : '(Simulated)'}`}</h3>
       <div className="flex flex-wrap gap-3">
         <button
           onClick={() => agent.start()}
