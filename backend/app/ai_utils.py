@@ -72,8 +72,17 @@ def slide_to_speech(slide: Slide):
     Returns:
         The path to the generated speech file.
     """
+    # ensure output directory exists
+    backend_root = os.path.dirname(os.path.dirname(__file__))
+    output_dir = os.path.join(backend_root, "speech_outputs")
+    os.makedirs(output_dir, exist_ok=True)
+
+    output_path = os.path.join(output_dir, f"{slide.id}.wav")
+
     generator = pipeline(slide.script, voice="af_heart")
     for i, (gs, ps, audio) in enumerate(generator):
         print(i, gs, ps)
-        sf.write(f"speech_outputs/{slide.id}.wav", audio, 24000)
-    return f"speech_outputs/{slide.id}.wav"
+        sf.write(output_path, audio, 24000)
+
+    # return relative path for storage in database
+    return os.path.relpath(output_path, backend_root)
