@@ -89,7 +89,7 @@ class StepResource(Resource):
 
             slide_text = lecture_step(lecture, slide_num)
             slide = Slide(
-                script=slide_text, slide_number=slide_num, lecture_id=lecture_id
+                id=slide_num, script=slide_text, slide_number=slide_num, lecture_id=lecture_id
             )
             db.add(slide)
             db.add(lecture)
