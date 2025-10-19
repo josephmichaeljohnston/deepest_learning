@@ -125,7 +125,9 @@ export default function DevControlsSidebar({
                   .map((s, idx) => (
                     <div key={`${s.page}-${idx}`} className="rounded border border-amber-200 bg-amber-50 p-2">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[11px] font-semibold text-amber-900">Slide {s.page}</span>
+                        <span className="text-[11px] font-semibold text-amber-900">
+                          {s.source === 'question' ? `Question ${s.questionIndex ?? ''}`.trim() : `Slide ${s.page}`}
+                        </span>
                       </div>
                       <div className="space-y-2">
                         <div>

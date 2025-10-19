@@ -17,6 +17,7 @@ export interface AgentControllerApi {
   jumpTo: (index: number) => Promise<void>
   progress: number
   requestPrompt: (message?: string) => void
+  logQuestionHypothesis: (entry: { hypothesis?: string; hypothesisUse?: string }) => void
   /**
    * Advance to the next step after a slide question without submitting an answer.
    * If the next step is already prefetched, it will be played immediately; otherwise it will be fetched.
@@ -318,5 +319,24 @@ export function useAgentController(
     postSlidePromptRef.current?.(message)
   }
 
-  return { state, currentStep, start, pause, resume, stop, skipTo, jumpTo, progress, requestPrompt, next }
+  const logQuestionHypothesis = useCallback((entry: { hypothesis?: string; hypothesisUse?: string }) => {
+    setState((prev) => {
+      const page = prev.steps[prev.currentStepIndex]?.page ?? 0
+      const questionIndex = (prev.steps.filter((s) => s.source === 'question').length || 0) + 1
+      const item: AgentStep = {
+        page,
+        audioUrl: '',
+        transcript: '',
+        hypothesis: entry.hypothesis,
+        hypothesisUse: entry.hypothesisUse,
+        source: 'question',
+        questionIndex,
+        label: `Question ${questionIndex}`,
+        speakMs: 0,
+      }
+      return { ...prev, steps: [...prev.steps, item] }
+    })
+  }, [])
+
+  return { state, currentStep, start, pause, resume, stop, skipTo, jumpTo, progress, requestPrompt, next, logQuestionHypothesis }
 }

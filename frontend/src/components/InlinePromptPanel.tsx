@@ -130,20 +130,23 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
         const data = await res.json()
         if (!data?.answer) throw new Error('No answer returned from backend')
         setResponse(data.answer)
-      }
-      // Close after short delay and clear input, then resume agent
-      setTimeout(() => {
-        setOpen(false)
-        setValue('')
-        // Automatically resume the agent to continue to next slide
+        // Log hypothesis update from a question to the history (no audio playback)
         try {
-          if (isAgentPrompted) {
+          ;(agent as any).logQuestionHypothesis?.({ hypothesis: data.hypothesis, hypothesisUse: data.hypothesis_use })
+        } catch {}
+      }
+      // For agent-prompted answers, auto-advance after a short delay; for user questions keep panel open to display the answer
+      if (isAgentPrompted) {
+        setTimeout(() => {
+          setOpen(false)
+          setValue('')
+          try {
             // Show waiting overlay while advancing to the next slide after answering
             setWaiting(true)
-          }
-          agent.resume()
-        } catch {}
-      }, 400)
+            agent.resume()
+          } catch {}
+        }, 400)
+      }
     } catch (e: any) {
       setError(e?.message || 'Something went wrong')
     } finally {
@@ -195,27 +198,34 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
 
       {/* Sliding panel */}
       <div
-        className={`mt-3 overflow-hidden transition-all duration-300 w-full max-w-2xl ${open ? 'max-h-[320px] opacity-100' : 'max-h-0 opacity-0'}`}
+        className={`mt-3 transition-all duration-300 w-full max-w-2xl ${open ? 'max-h-[65vh] opacity-100 overflow-y-auto' : 'max-h-0 opacity-0 overflow-hidden'}`}
       >
         <div className="rounded-xl border border-amber-200 bg-white">
           <div className="px-4 py-3 border-b">
             <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
           </div>
           <div className="px-4 py-4">
-            <label htmlFor="inline-qa-input" className="block text-sm font-medium text-gray-700 mb-2">Your response</label>
+            <label htmlFor="inline-qa-input" className="block text-sm font-medium text-gray-700 mb-2">
+              {isAgentPrompted ? 'Your answer' : 'Your question'}
+            </label>
             <textarea
               id="inline-qa-input"
               rows={3}
               className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500"
-              placeholder="Type here…"
+              placeholder={isAgentPrompted ? 'Type your answer…' : 'Type your question…'}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               disabled={loading}
             />
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-            {response && <p className="mt-2 text-sm text-green-700">{response}</p>}
+            {response && (
+              <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3">
+                <div className="text-[11px] font-semibold text-amber-900 uppercase tracking-wide">Answer</div>
+                <div className="mt-1 text-sm text-amber-900 whitespace-pre-wrap">{response}</div>
+              </div>
+            )}
           </div>
-          <div className="px-4 py-3 border-t flex items-center justify-end gap-2 bg-gray-50">
+          <div className="px-4 py-3 border-t flex items-center justify-end gap-2 bg-gray-50 sticky bottom-0">
             <button
               onClick={closePanel}
               className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100"
@@ -223,13 +233,25 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
             >
               {isAgentPrompted ? 'Skip' : 'Cancel'}
             </button>
-            <button
-              onClick={onSubmit}
-              className="px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60"
-              disabled={loading || !value.trim()}
-            >
-              {loading ? 'Sending…' : 'Send'}
-            </button>
+            {/* When a user question has an answer, show OK to close & resume; otherwise show Send */}
+            {!isAgentPrompted && response && (
+              <button
+                onClick={closePanel}
+                className="px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60"
+                disabled={loading}
+              >
+                OK
+              </button>
+            )}
+            {(!response || isAgentPrompted) && (
+              <button
+                onClick={onSubmit}
+                className="px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60"
+                disabled={loading || !value.trim()}
+              >
+                {loading ? 'Sending…' : 'Send'}
+              </button>
+            )}
           </div>
         </div>
       </div>

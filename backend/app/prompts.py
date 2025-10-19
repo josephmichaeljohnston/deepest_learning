@@ -162,4 +162,6 @@ Below, we have a lecture that is being delivered to a student and a question the
 
 Give the user an answer to the question.
 Also analyse the question the student is asking - does this change our hypothesis of the student's understanding of the topic? Provide the updated hypothesis. Do not refer in anyway to the meta understanding of the hypothesis. Please ensure that you do not focus too much on the most recent response, it should only impact the hypothesis in a small way. If they make claims about their own level of understanding (without necessarily providing evidence of this), take this at face value.
+
+Additionally, explain briefly how the current hypothesis influenced the style and content of your answer (tone, level of detail, examples). Provide this in a single short field named hypothesis_use.
 """

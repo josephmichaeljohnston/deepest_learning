@@ -43,7 +43,7 @@ export async function fetchStepFromBackend(
   
   console.log('[fetchStepFromBackend] Step fetched for page', pageNumber, '- Audio URL:', audioUrl)
   
-  return {
+    return {
     page: pageNumber,
     transcript: text,
     hypothesis,
@@ -55,5 +55,6 @@ export async function fetchStepFromBackend(
     audioStatusUrl,
     label: `Slide ${pageNumber}`,
     speakMs: estimatedMs,
+      source: hypothesis || hypothesisUse ? 'slide' : undefined,
   }
 }

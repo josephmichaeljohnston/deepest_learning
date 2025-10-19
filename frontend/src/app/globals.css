@@ -1,3 +1,49 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Gradient background cycling animation for decorative elements */
+@keyframes gradient-shift {
+	0% {
+		background-position: 0% 50%;
+	}
+	50% {
+		background-position: 100% 50%;
+	}
+	100% {
+		background-position: 0% 50%;
+	}
+}
+
+.animate-gradient {
+	background-size: 200% 200%;
+	animation: gradient-shift 6s ease infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.animate-gradient {
+		animation: none;
+	}
+}
+
+/* Text glow pulse effect */
+@keyframes glow-pulse {
+	0%, 100% {
+		text-shadow:
+			0 0 0px rgba(59, 130, 246, 0), /* blue-500 */
+			0 0 0px rgba(168, 85, 247, 0); /* purple-500 */
+	}
+	50% {
+		text-shadow:
+			0 0 10px rgba(59, 130, 246, 0.55),
+			0 0 22px rgba(168, 85, 247, 0.45);
+	}
+}
+
+.glow-text {
+	animation: glow-pulse 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.glow-text { animation: none; }
+}

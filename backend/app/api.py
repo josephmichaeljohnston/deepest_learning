@@ -56,7 +56,7 @@ question_request = api.model(
 )
 question_response = api.model(
     "QuestionResponse",
-    {"answer": fields.String(), "hypothesis": fields.String()},
+    {"answer": fields.String(), "hypothesis": fields.String(), "hypothesis_use": fields.String()},
 )
 
 UPLOAD_FOLDER = "uploads"  # Directory to store uploaded PDFs
@@ -237,8 +237,8 @@ class AudioResource(Resource):
 
 @ns.route("/user-question/<int:lecture_id>/<int:slide_num>")
 class UserQuestionResource(Resource):
-    @api.expect(answer_request)
-    @api.response(200, "OK", answer_response)
+    @api.expect(question_request)
+    @api.response(200, "OK", question_response)
     def post(self, lecture_id, slide_num):
         payload = request.get_json() or {}
         question = payload.get("question")
@@ -267,6 +267,7 @@ class UserQuestionResource(Resource):
         return {
             "answer": result["answer"],
             "hypothesis": hypothesis,
+            "hypothesis_use": result.get("hypothesis_use", ""),
         }
 
 

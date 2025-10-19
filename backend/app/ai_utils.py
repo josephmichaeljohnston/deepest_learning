@@ -28,6 +28,7 @@ class AnswerFeedback(BaseModel):
 class UserQuestionResponse(BaseModel):
     answer: str
     hypothesis: str
+    hypothesis_use: str
 
 
 class SlideResponse(BaseModel):
@@ -201,4 +202,8 @@ def user_ask_question(script: str, question: str, hypothesis: str) -> dict:
         text_format=UserQuestionResponse,
     )
     parsed_response = response.output_parsed
-    return {"answer": parsed_response.answer, "hypothesis": parsed_response.hypothesis}
+    return {
+        "answer": parsed_response.answer,
+        "hypothesis": parsed_response.hypothesis,
+        "hypothesis_use": parsed_response.hypothesis_use,
+    }
