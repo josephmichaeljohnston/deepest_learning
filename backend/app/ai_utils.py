@@ -11,7 +11,7 @@ from .prompts import answer_feedback_prompt, lecture_intro_prompt, lecture_step_
 from .utils import load_slide_as_named_tempfile
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-pipeline = KPipeline(lang_code='a')
+pipeline = KPipeline(lang_code="a")
 
 
 class AnswerFeedback(BaseModel):
@@ -110,7 +110,11 @@ def lecture_step(lecture: Lecture, slide_num: int):
         )
 
         script = response.output_parsed.script
-        question = response.output_parsed.question if response.output_parsed.ask_question else None
+        question = (
+            response.output_parsed.question
+            if response.output_parsed.ask_question
+            else None
+        )
         return {"script": script, "question": question}
 
     finally:
@@ -139,7 +143,9 @@ def slide_to_speech(slide: Slide):
     output_dir = os.path.join(backend_root, "speech_outputs")
     os.makedirs(output_dir, exist_ok=True)
 
-    output_path = os.path.join(output_dir, f"{slide.slide_number}-{slide.lecture_id}.wav")
+    output_path = os.path.join(
+        output_dir, f"{slide.slide_number}-{slide.lecture_id}.wav"
+    )
 
     # split script into sentences and synthesize one by one
     sentences = _split_into_sentences(slide.script or "")
@@ -162,3 +168,8 @@ def slide_to_speech(slide: Slide):
 
     # return relative path for storage in database
     return os.path.relpath(output_path, backend_root)
+
+
+def user_ask_question(script, question, hypothesis):
+
+    return {"answer": None, "hypothesis": None}
