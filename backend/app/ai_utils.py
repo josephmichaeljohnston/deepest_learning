@@ -69,7 +69,7 @@ def get_answer_feedback(question: str, answer: str, hypothesis: str) -> dict:
     """
     prompt = answer_feedback_prompt(question, answer, hypothesis)
     response = client.responses.parse(
-        model="gpt-5-mini",
+        model="gpt-5-nano",
         input=prompt,
         text_format=AnswerFeedback,
     )
@@ -97,7 +97,7 @@ def lecture_step(lecture: Lecture, slide_num: int):
             uploaded_slide = client.files.create(file=f, purpose="assistants")
 
         response = client.responses.parse(
-            model="gpt-5-mini",
+            model="gpt-5-nano",
             input=[
                 {
                     "role": "user",
@@ -196,7 +196,7 @@ def user_ask_question(script: str, question: str, hypothesis: str) -> dict:
     """
     prompt = user_question_prompt(script, question, hypothesis)
     response = client.responses.parse(
-        model="gpt-5-mini",
+        model="gpt-5-nano",
         input=prompt,
         text_format=UserQuestionResponse,
     )
