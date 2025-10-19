@@ -65,7 +65,7 @@ def get_answer_feedback(question: str, answer: str, hypothesis: str) -> dict:
     parsed_response = response.output_parsed
     return {
         "correct": parsed_response.correct,
-        "summary": parsed_response.summary,
+        "feedback": parsed_response.summary,
         "hypothesis": parsed_response.hypothesis,
     }
 
@@ -85,7 +85,7 @@ def lecture_step(lecture: Lecture, slide_num: int):
         with open(temp.name, "rb") as f:
             uploaded_slide = client.files.create(file=f, purpose="assistants")
 
-        response = client.responses.create(
+        response = client.responses.parse(
             model="gpt-5-mini",
             input=[
                 {
