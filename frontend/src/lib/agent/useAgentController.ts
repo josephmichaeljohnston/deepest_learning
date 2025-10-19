@@ -152,6 +152,11 @@ export function useAgentController(
     setState((s) => ({ ...s, status: 'paused' }))
   }, [audio])
 
+  const stop = useCallback(() => {
+    audio.stop()
+    setState({ status: 'stopped', currentStepIndex: -1, steps: [] })
+  }, [audio])
+
   const skipTo = useCallback(
     async (index: number) => {
       const steps = state.steps
@@ -164,54 +169,46 @@ export function useAgentController(
   )
 
   const resume = useCallback(() => {
-    // If a post-slide prompt was shown, continue to the next step
+    // If a post-slide prompt was shown, advance strictly to the next page
     (async () => {
       if (nextAfterPromptRef.current) {
         nextAfterPromptRef.current = false
         try {
-          // Derive next page and fetch on-demand (no prefetch)
-          const s = state
-          const currentPage = s.steps[s.currentStepIndex]?.page ?? 1
-          const nextPage = currentPage + 1
-          const { totalPages, lectureId } = configRef.current
-          if (!lectureId) throw new Error('lectureId required')
-          if (nextPage > totalPages) {
-            stop()
-            return
-          }
-          const nextStep = await fetchStepFromBackend(
-            typeof lectureId === 'number' ? lectureId : parseInt(String(lectureId)),
-            nextPage
-          )
-          setState((prev) => ({
-            ...prev,
-            steps: [...prev.steps, nextStep],
-            currentStepIndex: prev.currentStepIndex + 1,
-          }))
-          await playStep(nextStep)
+          await next()
           return
         } catch (e) {
-          console.error('[agent.resume] Failed to advance after prompt:', e)
-          // Fallback to explicit next() on failure
-          try { await next() } catch {}
+          console.error('[agent.resume] next() failed after prompt:', e)
+          setState((s) => ({ ...s, status: 'error', error: 'Failed to advance after prompt' }))
           return
         }
       }
 
+      // For manual resumes (not post-slide prompt):
+      // If current step is a stream, re-play that step to restart the stream reliably across browsers.
+      // For file audio, attempt native resume.
       try {
-        await audio.resume()
-        setState((s) => ({ ...s, status: 'playing' }))
+        const step = state.steps[state.currentStepIndex]
+        if (step?.audioStreamUrl) {
+          console.log('[agent.resume] Replaying current step (stream) for reliable resume')
+          await playStep(step)
+        } else {
+          await audio.resume()
+          setState((s) => ({ ...s, status: 'playing' }))
+        }
       } catch (e) {
-        console.error('[agent.resume] Resume failed:', e)
+        console.error('[agent.resume] Resume failed; attempting replay fallback:', e)
+        try {
+          const step = state.steps[state.currentStepIndex]
+          if (step) {
+            await playStep(step)
+            return
+          }
+        } catch {}
         setState((s) => ({ ...s, status: 'error', error: 'Failed to resume audio' }))
       }
     })()
-  }, [audio, skipTo, state, playStep])
+  }, [audio, state, playStep])
 
-  const stop = useCallback(() => {
-    audio.stop()
-    setState({ status: 'stopped', currentStepIndex: -1, steps: [] })
-  }, [audio])
 
   const jumpTo = useCallback(async (index: number) => {
     userSkipRef.current = true
@@ -227,27 +224,9 @@ export function useAgentController(
     try {
       const s = state
       const currentIndex = s.currentStepIndex
+      // Determine current page from the current slide step; ignore any placeholder steps that may exist after it
       const currentPage = s.steps[currentIndex]?.page ?? 1
-      let nextIndex = currentIndex + 1
       const nextPage = currentPage + 1
-
-      // If we already have subsequent steps (prefetched), choose the next playable slide step
-      if (nextIndex < s.steps.length) {
-        // Skip any non-slide placeholder entries (e.g., source === 'question' or missing audio)
-        while (
-          nextIndex < s.steps.length && (
-            s.steps[nextIndex]?.source === 'question' ||
-            (!s.steps[nextIndex]?.audioStreamUrl && !s.steps[nextIndex]?.audioUrl) ||
-            !s.steps[nextIndex]?.ttsText
-          )
-        ) {
-          nextIndex++
-        }
-        if (nextIndex < s.steps.length) {
-          await skipTo(nextIndex)
-          return
-        }
-      }
 
       const { totalPages, lectureId } = configRef.current
       if (!lectureId) throw new Error('lectureId required')
@@ -283,12 +262,12 @@ export function useAgentController(
     const updateProgress = () => {
       const duration = audio.duration
       const currentTime = audio.currentTime
-      
+
       if (duration > 0) {
         const pct = Math.min(1, currentTime / duration)
         setProgress(pct)
 
-        // Auto-advance when audio finishes
+        // Auto-advance when audio finishes (file or known duration)
         if (pct >= 1 && audio.status === 'idle') {
           if (userSkipRef.current) {
             userSkipRef.current = false
@@ -326,6 +305,41 @@ export function useAgentController(
               nextAfterPromptRef.current = true
             } else {
               console.log('[AudioMonitor] Reached end of document')
+              stop()
+            }
+          })().finally(() => {
+            isAdvancingRef.current = false
+          })
+        }
+      } else {
+        // Handle streaming cases where duration is unknown (0) but audio has ended and status becomes idle
+        if (audio.status === 'idle' && state.status === 'playing') {
+          if (userSkipRef.current) {
+            userSkipRef.current = false
+            return
+          }
+          if (isAdvancingRef.current) return
+          isAdvancingRef.current = true
+          console.log('[AudioMonitor] Stream ended (no duration), prompting user')
+          ;(async () => {
+            try {
+              pause()
+            } catch (e) {
+              console.error('[AudioMonitor] Pause error:', e)
+            }
+            try {
+              const q = state.steps[state.currentStepIndex]?.question
+              postSlidePromptRef.current?.(q ?? 'Do you understand?')
+            } catch (e) {
+              console.error('[AudioMonitor] Prompt callback error (stream):', e)
+            }
+            const currentPage = state.steps[state.currentStepIndex]?.page ?? 1
+            const nextPage = currentPage + 1
+            const { totalPages } = configRef.current
+            console.log('[AudioMonitor] (stream) Current page:', currentPage, 'Next page:', nextPage, 'Total pages:', totalPages)
+            if (nextPage <= totalPages) {
+              nextAfterPromptRef.current = true
+            } else {
               stop()
             }
           })().finally(() => {
