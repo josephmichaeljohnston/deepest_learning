@@ -110,18 +110,16 @@ class StepResource(Resource):
                 api.abort(404, "lecture not found")
 
             result = lecture_step(lecture, slide_num)
-            if (
-                old_slide := db.query(Slide)
+            # upsert slide: update existing row or create a new one
+            old_slide = (
+                db.query(Slide)
                 .filter_by(lecture_id=lecture_id, slide_number=slide_num)
                 .first()
-            ):
-                slide = Slide(
-                    id=old_slide.id,
-                    script=result["script"],
-                    slide_number=slide_num,
-                    lecture_id=lecture_id,
-                    question=result["question"],
-                )
+            )
+            if old_slide:
+                old_slide.script = result["script"]
+                old_slide.question = result["question"]
+                slide = old_slide
             else:
                 slide = Slide(
                     script=result["script"],
@@ -129,7 +127,7 @@ class StepResource(Resource):
                     lecture_id=lecture_id,
                     question=result["question"],
                 )
-            db.add(slide)
+                db.add(slide)
             db.add(lecture)
             db.commit()
             db.refresh(lecture)
@@ -360,14 +358,47 @@ class AudioStreamResource(Resource):
         db_gen = get_db()
         db = next(db_gen)
         try:
-            slide = (
-                db.query(Slide)
-                .filter_by(lecture_id=lecture_id, slide_number=slide_num)
-                .first()
-            )
+            # brief readiness wait loop to tolerate race with step commit
+            import time
+            max_wait_seconds = 3.0
+            deadline = time.time() + max_wait_seconds
+            slide = None
+            while time.time() < deadline:
+                slide = (
+                    db.query(Slide)
+                    .filter_by(lecture_id=lecture_id, slide_number=slide_num)
+                    .first()
+                )
+                if slide and slide.script:
+                    break
+                # small sleep then try again
+                time.sleep(0.1)
+                # expire session state to ensure fresh read
+                db.expire_all()
+
+            # if still not ready, generate on-demand as a fallback
+            if not slide or not slide.script:
+                lecture = db.query(Lecture).filter_by(id=lecture_id).first()
+                if not lecture:
+                    api.abort(404, "lecture not found")
+                result = lecture_step(lecture, slide_num)
+                if not slide:
+                    slide = Slide(
+                        script=result["script"],
+                        slide_number=slide_num,
+                        lecture_id=lecture_id,
+                        question=result["question"],
+                    )
+                    db.add(slide)
+                else:
+                    slide.script = result["script"]
+                    slide.question = result["question"]
+                db.add(lecture)
+                db.commit()
+                db.refresh(slide)
+
             if not slide:
                 api.abort(404, "slide not found")
-
             if not slide.script:
                 api.abort(404, "no script available for this slide")
 
