@@ -210,3 +210,40 @@ class AudioResource(Resource):
                 next(db_gen)
             except StopIteration:
                 pass
+
+
+ns.route("/user-question/<int:lecture_id>/<int:slide_num>")
+
+
+class UserQuestionResource(Resource):
+    @api.expect(answer_request)
+    @api.response(200, "OK", answer_response)
+    def post(self, lecture_id, slide_num):
+        payload = request.get_json() or {}
+        question = payload.get("answer")
+        if not question:
+            api.abort(400, "question required")
+        db_gen = get_db()
+        db = next(db_gen)
+        lecture = db.query(Lecture).filter_by(id=lecture_id).first()
+        if not lecture:
+            api.abort(404, "lecture not found")
+
+        slide = (
+            db.query(Slide)
+            .filter_by(lecture_id=lecture_id, slide_number=slide_num)
+            .first()
+        )
+        if not slide:
+            api.abort(404, "slide not found")
+
+        result = get_answer_feedback(
+            question, "", lecture.lecture_hypothesis, is_user_question=True
+        )
+        feedback = result["feedback"]
+        hypothesis = result["hypothesis"]
+        return {
+            "id": lecture_id,
+            "feedback": feedback,
+            "hypothesis": hypothesis,
+        }
