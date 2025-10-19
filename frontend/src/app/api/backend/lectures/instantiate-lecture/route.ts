@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { BACKEND_URL } from '@/lib/config'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
+
 export async function POST(req: NextRequest) {
   try {
     const form = await req.formData()
@@ -16,7 +21,7 @@ export async function POST(req: NextRequest) {
 
     const url = `${BACKEND_URL}/lectures/instantiate-lecture`
     console.log('[instantiate-lecture] Proxying to:', url)
-    const res = await fetch(url, { method: 'POST', body: out as any })
+  const res = await fetch(url, { method: 'POST', body: out as any, cache: 'no-store' })
     console.log('[instantiate-lecture] Backend response status:', res.status)
     
     const text = await res.text()

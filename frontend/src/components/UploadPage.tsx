@@ -40,7 +40,8 @@ export default function UploadPage() {
           body: backendForm,
         })
         if (!backendRes.ok) {
-          setMessage('Backend connection failed. Please ensure backend is running.')
+          const txt = await backendRes.text().catch(() => '')
+          setMessage(`Backend connection failed. Please ensure backend is running. ${txt ? `Details: ${txt.substring(0,200)}` : ''}`)
           setUploading(false)
           return
         }

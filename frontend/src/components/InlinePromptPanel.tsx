@@ -20,6 +20,8 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
   const [response, setResponse] = useState<string | null>(null)
   const [isAgentPrompted, setIsAgentPrompted] = useState(false)  // Track if opened by agent
   const [waiting, setWaiting] = useState(false) // Show overlay while waiting on server/next slide
+  // Only allow asking a question once the lecture has started (i.e., we have at least one step)
+  const canAskQuestion = agent.state.currentStepIndex >= 0
 
   const openPanel = (message?: string) => {
     console.log('[InlinePromptPanel] openPanel called with message:', message)
@@ -135,18 +137,7 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
           ;(agent as any).logQuestionHypothesis?.({ hypothesis: data.hypothesis, hypothesisUse: data.hypothesis_use })
         } catch {}
       }
-      // For agent-prompted answers, auto-advance after a short delay; for user questions keep panel open to display the answer
-      if (isAgentPrompted) {
-        setTimeout(() => {
-          setOpen(false)
-          setValue('')
-          try {
-            // Show waiting overlay while advancing to the next slide after answering
-            setWaiting(true)
-            agent.resume()
-          } catch {}
-        }, 400)
-      }
+      // For agent-prompted answers, keep panel open to display feedback; user advances with Continue
     } catch (e: any) {
       setError(e?.message || 'Something went wrong')
     } finally {
@@ -189,8 +180,12 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
       {/* Collapsed control bar - Centered */}
       {!open && (
         <button
-          onClick={() => openPanelManually()}
-          className="px-6 py-3 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-700 transition-colors text-base"
+          onClick={() => canAskQuestion && openPanelManually()}
+          className={`px-6 py-3 rounded-lg text-white font-bold transition-colors text-base ${
+            canAskQuestion ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-400 cursor-not-allowed'
+          }`}
+          disabled={!canAskQuestion}
+          title={canAskQuestion ? 'Ask a question' : 'Start the lecture to ask a question'}
         >
           Ask a question
         </button>
@@ -215,12 +210,12 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
               placeholder={isAgentPrompted ? 'Type your answer…' : 'Type your question…'}
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              disabled={loading}
+              disabled={loading || (isAgentPrompted && !!response)}
             />
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
             {response && (
               <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3">
-                <div className="text-[11px] font-semibold text-amber-900 uppercase tracking-wide">Answer</div>
+                <div className="text-[11px] font-semibold text-amber-900 uppercase tracking-wide">{isAgentPrompted ? 'Feedback' : 'Answer'}</div>
                 <div className="mt-1 text-sm text-amber-900 whitespace-pre-wrap">{response}</div>
               </div>
             )}
@@ -233,6 +228,23 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
             >
               {isAgentPrompted ? 'Skip' : 'Cancel'}
             </button>
+            {/* When agent-prompted and feedback is available, provide Continue to advance */}
+            {isAgentPrompted && response && (
+              <button
+                onClick={() => {
+                  setOpen(false)
+                  setValue('')
+                  try {
+                    setWaiting(true)
+                    agent.resume()
+                  } catch {}
+                }}
+                className="px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60"
+                disabled={loading}
+              >
+                Continue
+              </button>
+            )}
             {/* When a user question has an answer, show OK to close & resume; otherwise show Send */}
             {!isAgentPrompted && response && (
               <button
@@ -243,7 +255,7 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
                 OK
               </button>
             )}
-            {(!response || isAgentPrompted) && (
+            {!response && (
               <button
                 onClick={onSubmit}
                 className="px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60"

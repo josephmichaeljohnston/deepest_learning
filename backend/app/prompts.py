@@ -117,7 +117,8 @@ def answer_feedback_prompt(question: str, answer: str, hypothesis: str) -> str:
     """
     return f"""
 Analyse the correctness of the following student's answer to a question, and provide a brief summary addressed to them on what they did well and what they could improve on.
-Also analyse how the student answers the question - does this change our hypothesis of the student's understanding of the topic? Provide the updated hypothesis. Do not refer in anyway to the meta understanding of the hypothesis. Please ensure that you do not focus too much on the most recent response, it should only impact the hypothesis in a small way.
+Also analyse how the student answers the question - does this change our hypothesis of the student's understanding of the topic? Provide the updated hypothesis. Do not refer in anyway to the meta understanding of the hypothesis.
+If the user makes any claims about their own level of understanding (without necessarily providing evidence of this) you MUST take this as truth and overwrite previous hypotheses.
 
 <question>
 {question}
@@ -161,7 +162,7 @@ Below, we have a lecture that is being delivered to a student and a question the
 </student hypothesis>
 
 Give the user an answer to the question.
-Also analyse the question the student is asking - does this change our hypothesis of the student's understanding of the topic? Provide the updated hypothesis. Do not refer in anyway to the meta understanding of the hypothesis. Please ensure that you do not focus too much on the most recent response, it should only impact the hypothesis in a small way. If they make claims about their own level of understanding (without necessarily providing evidence of this), take this at face value.
+Also analyse the question the student is asking - does this change our hypothesis of the student's understanding of the topic? Provide the updated hypothesis. Do not refer in anyway to the meta understanding of the hypothesis. Please ensure that you do not focus too much on the most recent response, it should only impact the hypothesis in a small way. However, If they make claims about their own level of understanding (without necessarily providing evidence of this) you MUST take this as truth and overwrite previous hypotheses.
 
 Additionally, explain briefly how the current hypothesis influenced the style and content of your answer (tone, level of detail, examples). Provide this in a single short field named hypothesis_use.
 """
