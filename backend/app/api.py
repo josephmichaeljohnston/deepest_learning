@@ -284,45 +284,71 @@ def _split_into_sentences_for_streaming(text: str):
     return [s.strip() for s in sentences if s.strip()]
 
 
+import struct
+
+
+def create_wav_header(sample_rate=24000, bits_per_sample=16, channels=1):
+    """Create a WAV header for streaming (with unknown data size)."""
+    # For streaming, we set data size to max value since we don't know it yet
+    data_size = 0xFFFFFFFF - 36  # Maximum value for unknown size
+
+    header = bytearray()
+
+    # RIFF header
+    header.extend(b"RIFF")
+    header.extend(struct.pack("<I", data_size + 36))  # File size - 8
+    header.extend(b"WAVE")
+
+    # fmt subchunk
+    header.extend(b"fmt ")
+    header.extend(struct.pack("<I", 16))  # Subchunk size
+    header.extend(struct.pack("<H", 1))  # Audio format (1 = PCM)
+    header.extend(struct.pack("<H", channels))
+    header.extend(struct.pack("<I", sample_rate))
+    byte_rate = sample_rate * channels * bits_per_sample // 8
+    header.extend(struct.pack("<I", byte_rate))
+    block_align = channels * bits_per_sample // 8
+    header.extend(struct.pack("<H", block_align))
+    header.extend(struct.pack("<H", bits_per_sample))
+
+    # data subchunk
+    header.extend(b"data")
+    header.extend(struct.pack("<I", data_size))
+
+    return bytes(header)
+
+
 def generate_audio_stream(script: str, voice: str = "af_heart"):
     """
-    Generator that yields WAV audio chunks as they're synthesized.
+    Generator that yields audio chunks as they're synthesized in real-time.
 
     Args:
         script: The text to synthesize
         voice: The voice to use for synthesis
 
     Yields:
-        Audio data chunks in WAV format
+        Audio data chunks (WAV header first, then raw PCM data)
     """
     from .ai_utils import pipeline
 
     sentences = _split_into_sentences_for_streaming(script)
-
-    # WAV header will be written first, then we append audio data
-    # We'll use a streaming approach where we yield chunks
-    is_first_chunk = True
     sample_rate = 24000
 
+    # Send WAV header first
+    yield create_wav_header(sample_rate=sample_rate, bits_per_sample=16, channels=1)
+
+    # Stream audio data as it's generated
     for sentence in sentences:
         generator = pipeline(sentence, voice=voice)
 
         for i, (gs, ps, audio) in enumerate(generator):
             audio_array = np.asarray(audio, dtype=np.float32)
 
-            # Convert numpy array to WAV bytes
-            buffer = io.BytesIO()
-            sf.write(buffer, audio_array, sample_rate, format="WAV")
-            buffer.seek(0)
-            wav_bytes = buffer.read()
+            # Convert float32 to int16 PCM
+            audio_int16 = (audio_array * 32767).astype(np.int16)
 
-            if is_first_chunk:
-                # First chunk includes the WAV header
-                yield wav_bytes
-                is_first_chunk = False
-            else:
-                # Subsequent chunks: skip the 44-byte WAV header
-                yield wav_bytes[44:]
+            # Yield raw PCM bytes
+            yield audio_int16.tobytes()
 
 
 @ns.route("/audio-stream/<int:lecture_id>/<int:slide_num>")
