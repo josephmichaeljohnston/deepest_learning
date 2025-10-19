@@ -235,9 +235,14 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
                   setOpen(false)
                   setValue('')
                   try {
+                    // Advance deterministically after an agent-prompted answer
+                    // Using next() avoids relying on audio 'ended' events or internal flags
                     setWaiting(true)
-                    agent.resume()
-                  } catch {}
+                    ;(agent as any).next?.()
+                  } catch (e) {
+                    console.error('[InlinePromptPanel] Continue failed:', e)
+                    setWaiting(false)
+                  }
                 }}
                 className="px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60"
                 disabled={loading}

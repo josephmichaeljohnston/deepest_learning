@@ -192,13 +192,21 @@ export function useAgentController(
           return
         } catch (e) {
           console.error('[agent.resume] Failed to advance after prompt:', e)
+          // Fallback to explicit next() on failure
+          try { await next() } catch {}
+          return
         }
       }
 
-      audio.resume()
-      setState((s) => ({ ...s, status: 'playing' }))
+      try {
+        await audio.resume()
+        setState((s) => ({ ...s, status: 'playing' }))
+      } catch (e) {
+        console.error('[agent.resume] Resume failed:', e)
+        setState((s) => ({ ...s, status: 'error', error: 'Failed to resume audio' }))
+      }
     })()
-  }, [audio, skipTo])
+  }, [audio, skipTo, state, playStep])
 
   const stop = useCallback(() => {
     audio.stop()
@@ -220,13 +228,25 @@ export function useAgentController(
       const s = state
       const currentIndex = s.currentStepIndex
       const currentPage = s.steps[currentIndex]?.page ?? 1
-      const nextIndex = currentIndex + 1
+      let nextIndex = currentIndex + 1
       const nextPage = currentPage + 1
 
-      // If we already have the next step (prefetched), just play it
+      // If we already have subsequent steps (prefetched), choose the next playable slide step
       if (nextIndex < s.steps.length) {
-        await skipTo(nextIndex)
-        return
+        // Skip any non-slide placeholder entries (e.g., source === 'question' or missing audio)
+        while (
+          nextIndex < s.steps.length && (
+            s.steps[nextIndex]?.source === 'question' ||
+            (!s.steps[nextIndex]?.audioStreamUrl && !s.steps[nextIndex]?.audioUrl) ||
+            !s.steps[nextIndex]?.ttsText
+          )
+        ) {
+          nextIndex++
+        }
+        if (nextIndex < s.steps.length) {
+          await skipTo(nextIndex)
+          return
+        }
       }
 
       const { totalPages, lectureId } = configRef.current

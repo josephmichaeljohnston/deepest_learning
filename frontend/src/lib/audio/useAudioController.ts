@@ -48,6 +48,7 @@ async function waitForAudioAvailable(audioUrl: string, maxWaitMs: number = 12000
 
 export function useAudioController(): AudioController {
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const isStreamRef = useRef(false)
   const [status, setStatus] = useState<AudioController['status']>('idle')
   const [error, setError] = useState<string | undefined>(undefined)
   const [duration, setDuration] = useState(0)
@@ -68,6 +69,17 @@ export function useAudioController(): AudioController {
       console.log('[useAudioController] Audio ended')
       setStatus('idle')
     }
+    const onPause = () => {
+      // Some browsers (Mac/Chrome) with streaming WAV may fire pause without 'ended'.
+      // Treat a pause after playback started as end-of-stream when streaming.
+      if (status === 'playing') {
+        const endedLike = audio.ended || (isStreamRef.current && audio.currentTime > 0 && audio.readyState >= 2)
+        if (endedLike) {
+          console.log('[useAudioController] Treating pause as ended (stream)')
+          setStatus('idle')
+        }
+      }
+    }
     const onError = () => {
       const errorMsg = `Audio error: ${audio.error?.message || 'Unknown error'}`
       console.error('[useAudioController]', errorMsg)
@@ -78,6 +90,7 @@ export function useAudioController(): AudioController {
     audio.addEventListener('loadedmetadata', onLoaded)
     audio.addEventListener('timeupdate', onTime)
     audio.addEventListener('ended', onEnded)
+  audio.addEventListener('pause', onPause)
     audio.addEventListener('error', onError)
     // Helpful buffering logs similar to provided snippet
     const onProgress = () => {
@@ -94,6 +107,7 @@ export function useAudioController(): AudioController {
       audio.removeEventListener('loadedmetadata', onLoaded)
       audio.removeEventListener('timeupdate', onTime)
       audio.removeEventListener('ended', onEnded)
+  audio.removeEventListener('pause', onPause)
       audio.removeEventListener('error', onError)
       audio.removeEventListener('progress', onProgress)
       audio.removeEventListener('canplay', onCanPlay)
@@ -113,6 +127,7 @@ export function useAudioController(): AudioController {
     audio.pause()
     // If using a stream endpoint, skip polling and assign src immediately
     const isStream = url.includes('/audio-stream/')
+    isStreamRef.current = isStream
     if (!isStream) {
       // Wait until the backend serves the audio file (poll the same URL)
       try {
