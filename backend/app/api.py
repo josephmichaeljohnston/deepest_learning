@@ -182,21 +182,53 @@ class AudioResource(Resource):
                 .filter_by(lecture_id=lecture_id, slide_number=slide_num)
                 .first()
             )
+
+            backend_root = os.path.dirname(os.path.dirname(__file__))
+
+            # Helper to attempt direct file serve by convention
+            def try_send_conventional():
+                candidates = [
+                    os.path.join(backend_root, "speech_outputs", f"{slide_num}-{lecture_id}.wav"),
+                    os.path.join(
+                        backend_root, "speech_outputs", f"lecture_{lecture_id}_slide_{slide_num}.wav"
+                    ),
+                ]
+                for p in candidates:
+                    if os.path.isfile(p):
+                        mime_type, _ = mimetypes.guess_type(p)
+                        return send_file(
+                            p,
+                            mimetype=mime_type or "audio/wav",
+                            as_attachment=False,
+                        )
+                return None
+
             if not slide:
+                # Fallback: DB was reset but file may exist on disk
+                resp = try_send_conventional()
+                if resp is not None:
+                    return resp
                 api.abort(404, "slide not found")
 
             audio_path = slide.audio_path
             if not audio_path:
+                # Fallback to conventional path if DB record lacks audio_path
+                resp = try_send_conventional()
+                if resp is not None:
+                    return resp
                 api.abort(404, "audio not available for this slide")
 
             # resolve relative paths against backend root
             if os.path.isabs(audio_path):
                 resolved_path = audio_path
             else:
-                backend_root = os.path.dirname(os.path.dirname(__file__))
                 resolved_path = os.path.join(backend_root, audio_path)
 
             if not os.path.isfile(resolved_path):
+                # Final fallback attempt
+                resp = try_send_conventional()
+                if resp is not None:
+                    return resp
                 api.abort(404, "audio file not found")
 
             mime_type, _ = mimetypes.guess_type(resolved_path)

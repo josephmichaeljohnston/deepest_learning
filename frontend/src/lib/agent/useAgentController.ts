@@ -135,14 +135,6 @@ export function useAgentController(
 
   const resume = useCallback(() => {
     audio.resume()
-    // If a post-slide prompt was shown, continue to the next step
-    if (nextAfterPromptRef.current && pendingNextIndexRef.current != null) {
-      const idx = pendingNextIndexRef.current
-      nextAfterPromptRef.current = false
-      pendingNextIndexRef.current = null
-      skipTo(idx)
-      return
-    }
     setState((s) => ({ ...s, status: 'playing' }))
   }, [audio, skipTo])
 
@@ -180,15 +172,9 @@ export function useAgentController(
           if (isAdvancingRef.current) return
           
           isAdvancingRef.current = true
-          console.log('[AudioMonitor] Audio finished, showing prompt')
+          console.log('[AudioMonitor] Audio finished, advancing to next slide')
           
           ;(async () => {
-            // Pause and show question
-            try { pause() } catch (e) { console.error('[AudioMonitor] Pause error:', e) }
-            try {
-              postSlidePromptRef.current?.('Do you understand?')
-            } catch (e) { console.error('[AudioMonitor] Prompt callback error:', e) }
-            
             // Load next page if available
             const currentPage = state.steps[state.currentStepIndex]?.page ?? 1
             const nextPage = currentPage + 1
@@ -206,13 +192,13 @@ export function useAgentController(
                   typeof lectureId === 'number' ? lectureId : parseInt(String(lectureId)),
                   nextPage
                 )
+                // Append step and immediately play it
                 setState((s) => ({
                   ...s,
                   steps: [...s.steps, nextStep],
+                  currentStepIndex: s.currentStepIndex + 1,
                 }))
-                const nextIndex = state.currentStepIndex + 1
-                nextAfterPromptRef.current = true
-                pendingNextIndexRef.current = nextIndex
+                await playStep(nextStep)
               } catch (e) {
                 console.error('[AudioMonitor] Failed to load next step:', e)
                 stop()
