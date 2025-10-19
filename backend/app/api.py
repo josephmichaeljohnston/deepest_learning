@@ -266,3 +266,121 @@ class UserQuestionResource(Resource):
             "answer": result["answer"],
             "hypothesis": hypothesis,
         }
+
+
+import io
+import numpy as np
+import soundfile as sf
+from flask import Response
+import re
+
+
+def _split_into_sentences_for_streaming(text: str):
+    """Split text into sentences for streaming."""
+    text = text.strip()
+    if not text:
+        return []
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    return [s.strip() for s in sentences if s.strip()]
+
+
+import struct
+
+
+def create_wav_header(sample_rate=24000, bits_per_sample=16, channels=1):
+    """Create a WAV header for streaming (with unknown data size)."""
+    # For streaming, we set data size to max value since we don't know it yet
+    data_size = 0xFFFFFFFF - 36  # Maximum value for unknown size
+
+    header = bytearray()
+
+    # RIFF header
+    header.extend(b"RIFF")
+    header.extend(struct.pack("<I", data_size + 36))  # File size - 8
+    header.extend(b"WAVE")
+
+    # fmt subchunk
+    header.extend(b"fmt ")
+    header.extend(struct.pack("<I", 16))  # Subchunk size
+    header.extend(struct.pack("<H", 1))  # Audio format (1 = PCM)
+    header.extend(struct.pack("<H", channels))
+    header.extend(struct.pack("<I", sample_rate))
+    byte_rate = sample_rate * channels * bits_per_sample // 8
+    header.extend(struct.pack("<I", byte_rate))
+    block_align = channels * bits_per_sample // 8
+    header.extend(struct.pack("<H", block_align))
+    header.extend(struct.pack("<H", bits_per_sample))
+
+    # data subchunk
+    header.extend(b"data")
+    header.extend(struct.pack("<I", data_size))
+
+    return bytes(header)
+
+
+def generate_audio_stream(script: str, voice: str = "af_heart"):
+    """
+    Generator that yields audio chunks as they're synthesized in real-time.
+
+    Args:
+        script: The text to synthesize
+        voice: The voice to use for synthesis
+
+    Yields:
+        Audio data chunks (WAV header first, then raw PCM data)
+    """
+    from .ai_utils import pipeline
+
+    sentences = _split_into_sentences_for_streaming(script)
+    sample_rate = 24000
+
+    # Send WAV header first
+    yield create_wav_header(sample_rate=sample_rate, bits_per_sample=16, channels=1)
+
+    # Stream audio data as it's generated
+    for sentence in sentences:
+        generator = pipeline(sentence, voice=voice)
+
+        for i, (gs, ps, audio) in enumerate(generator):
+            audio_array = np.asarray(audio, dtype=np.float32)
+
+            # Convert float32 to int16 PCM
+            audio_int16 = (audio_array * 32767).astype(np.int16)
+
+            # Yield raw PCM bytes
+            yield audio_int16.tobytes()
+
+
+@ns.route("/audio-stream/<int:lecture_id>/<int:slide_num>")
+class AudioStreamResource(Resource):
+    def get(self, lecture_id, slide_num):
+        """Stream audio as it's being generated in real-time"""
+        db_gen = get_db()
+        db = next(db_gen)
+        try:
+            slide = (
+                db.query(Slide)
+                .filter_by(lecture_id=lecture_id, slide_number=slide_num)
+                .first()
+            )
+            if not slide:
+                api.abort(404, "slide not found")
+
+            if not slide.script:
+                api.abort(404, "no script available for this slide")
+
+            return Response(
+                generate_audio_stream(slide.script),
+                mimetype="audio/wav",
+                headers={
+                    "Content-Disposition": "inline",
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                    "Transfer-Encoding": "chunked",
+                },
+            )
+        finally:
+            try:
+                next(db_gen)
+            except StopIteration:
+                pass
