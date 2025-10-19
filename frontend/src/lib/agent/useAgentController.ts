@@ -17,6 +17,11 @@ export interface AgentControllerApi {
   jumpTo: (index: number) => Promise<void>
   progress: number
   requestPrompt: (message?: string) => void
+  /**
+   * Advance to the next step after a slide question without submitting an answer.
+   * If the next step is already prefetched, it will be played immediately; otherwise it will be fetched.
+   */
+  next: () => Promise<void>
 }
 
 export function useAgentController(
@@ -45,7 +50,7 @@ export function useAgentController(
   
   const loadingNextRef = useRef(false)
   const pendingNav = useRef<Promise<void> | null>(null)
-  const pendingNextPageRef = useRef<number | null>(null)
+  // Note: when a next step is prefetched during the post-slide prompt, we store its index here
 
   const navigateTo = useCallback(async (page: number) => {
     const go = async () => {
@@ -137,28 +142,33 @@ export function useAgentController(
   const resume = useCallback(() => {
     // If a post-slide prompt was shown, continue to the next step
     (async () => {
-      if (nextAfterPromptRef.current && pendingNextPageRef.current != null) {
-        const page = pendingNextPageRef.current
+      if (nextAfterPromptRef.current) {
         nextAfterPromptRef.current = false
-        pendingNextPageRef.current = null
         try {
-          const lectureId = configRef.current.lectureId
+          // Derive next page and fetch on-demand (no prefetch)
+          const s = state
+          const currentPage = s.steps[s.currentStepIndex]?.page ?? 1
+          const nextPage = currentPage + 1
+          const { totalPages, lectureId } = configRef.current
           if (!lectureId) throw new Error('lectureId required')
+          if (nextPage > totalPages) {
+            stop()
+            return
+          }
           const nextStep = await fetchStepFromBackend(
             typeof lectureId === 'number' ? lectureId : parseInt(String(lectureId)),
-            page
+            nextPage
           )
-          // Append and play
-          setState((s) => ({
-            ...s,
-            steps: [...s.steps, nextStep],
-            currentStepIndex: s.currentStepIndex + 1,
+          setState((prev) => ({
+            ...prev,
+            steps: [...prev.steps, nextStep],
+            currentStepIndex: prev.currentStepIndex + 1,
           }))
           await playStep(nextStep)
+          return
         } catch (e) {
-          console.error('[agent.resume] Failed to fetch/play next step:', e)
+          console.error('[agent.resume] Failed to advance after prompt:', e)
         }
-        return
       }
 
       audio.resume()
@@ -175,6 +185,49 @@ export function useAgentController(
     userSkipRef.current = true
     await skipTo(index)
   }, [skipTo])
+
+  // Advance to next slide without posting an answer
+  const next = useCallback(async () => {
+    // Stop any current audio to avoid overlap
+    try { audio.stop() } catch {}
+
+    setState((s) => ({ ...s, status: 'fetching' }))
+    try {
+      const s = state
+      const currentIndex = s.currentStepIndex
+      const currentPage = s.steps[currentIndex]?.page ?? 1
+      const nextIndex = currentIndex + 1
+      const nextPage = currentPage + 1
+
+      // If we already have the next step (prefetched), just play it
+      if (nextIndex < s.steps.length) {
+        await skipTo(nextIndex)
+        return
+      }
+
+      const { totalPages, lectureId } = configRef.current
+      if (!lectureId) throw new Error('lectureId required')
+      if (nextPage > totalPages) {
+        // End of lecture
+        stop()
+        return
+      }
+
+      const nextStep = await fetchStepFromBackend(
+        typeof lectureId === 'number' ? lectureId : parseInt(String(lectureId)),
+        nextPage
+      )
+      setState((prev) => ({
+        ...prev,
+        steps: [...prev.steps, nextStep],
+        currentStepIndex: prev.currentStepIndex + 1,
+      }))
+      await playStep(nextStep)
+    } catch (e) {
+      console.error('[agent.next] Failed to advance to next step:', e)
+      setState((s) => ({ ...s, status: 'error', error: (e as any)?.message || 'Failed to advance' }))
+    }
+  }, [audio, playStep, skipTo, state, stop])
 
   // Monitor audio playback to drive progress and auto-advance
   useEffect(() => {
@@ -217,7 +270,7 @@ export function useAgentController(
               console.error('[AudioMonitor] Prompt callback error:', e)
             }
 
-            // Prefetch next page if available so resume is fast
+            // Mark that the next action should advance; do not prefetch (fetch only on user action)
             const currentPage = state.steps[state.currentStepIndex]?.page ?? 1
             const nextPage = currentPage + 1
             const { totalPages } = configRef.current
@@ -225,28 +278,8 @@ export function useAgentController(
             console.log('[AudioMonitor] Current page:', currentPage, 'Next page:', nextPage, 'Total pages:', totalPages)
 
             if (nextPage <= totalPages) {
-              try {
-                loadingNextRef.current = true
-                const lectureId = configRef.current.lectureId
-                if (!lectureId) throw new Error('lectureId required')
-                console.log('[AudioMonitor] Prefetching next step for page:', nextPage)
-                const nextStep = await fetchStepFromBackend(
-                  typeof lectureId === 'number' ? lectureId : parseInt(String(lectureId)),
-                  nextPage
-                )
-                setState((s) => ({
-                  ...s,
-                  steps: [...s.steps, nextStep],
-                }))
-                const nextIndex = state.currentStepIndex + 1
-                nextAfterPromptRef.current = true
-                pendingNextIndexRef.current = nextIndex
-              } catch (e) {
-                console.error('[AudioMonitor] Failed to prefetch next step:', e)
-                // don't stop the whole lecture; let the user continue manually
-              } finally {
-                loadingNextRef.current = false
-              }
+              // Set flag so a subsequent user action (answer or skip) triggers fetching the next step
+              nextAfterPromptRef.current = true
             } else {
               console.log('[AudioMonitor] Reached end of document')
               stop()
@@ -276,5 +309,5 @@ export function useAgentController(
     postSlidePromptRef.current?.(message)
   }
 
-  return { state, currentStep, start, pause, resume, stop, skipTo, jumpTo, progress, requestPrompt }
+  return { state, currentStep, start, pause, resume, stop, skipTo, jumpTo, progress, requestPrompt, next }
 }

@@ -19,6 +19,7 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
   const [error, setError] = useState<string | null>(null)
   const [response, setResponse] = useState<string | null>(null)
   const [isAgentPrompted, setIsAgentPrompted] = useState(false)  // Track if opened by agent
+  const [waiting, setWaiting] = useState(false) // Show overlay while waiting on server/next slide
 
   const openPanel = (message?: string) => {
     console.log('[InlinePromptPanel] openPanel called with message:', message)
@@ -75,8 +76,14 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
     // Only resume if agent is paused
     if (agent.state.status === 'paused') {
       try {
-        console.log('[InlinePromptPanel] Resuming agent on close')
-        agent.resume()
+        console.log('[InlinePromptPanel] Resuming/advancing agent on close')
+        // If this panel was agent-prompted (end-of-slide question), treat close as Skip
+        if (isAgentPrompted && typeof (agent as any).next === 'function') {
+          setWaiting(true)
+          ;(agent as any).next()
+        } else {
+          agent.resume()
+        }
       } catch (e) {
         console.error('[InlinePromptPanel] Error resuming agent on close:', e)
       }
@@ -127,6 +134,10 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
         setValue('')
         // Automatically resume the agent to continue to next slide
         try {
+          if (isAgentPrompted) {
+            // Show waiting overlay while advancing to the next slide after answering
+            setWaiting(true)
+          }
           agent.resume()
         } catch {}
       }, 400)
@@ -137,8 +148,38 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
     }
   }
 
+  // Hide waiting overlay once the agent starts playing (or if a terminal state occurs)
+  React.useEffect(() => {
+    if (!waiting) return
+    let cancelled = false
+    const started = Date.now()
+    const clear = () => { if (!cancelled) setWaiting(false) }
+    const interval = setInterval(() => {
+      const st = agent.state.status
+      if (st === 'playing' || st === 'error' || st === 'stopped' || st === 'completed') {
+        clear()
+      } else if (Date.now() - started > 45000) {
+        // Fail-safe after 45s
+        clear()
+      }
+    }, 150)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [waiting, agent.state.status])
+
   return (
     <div className="w-full flex flex-col items-center">
+      {/* Waiting overlay */}
+      {waiting && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/40">
+          <div className="px-4 py-3 rounded-lg bg-white shadow flex items-center gap-3">
+            <svg className="h-5 w-5 text-amber-600 animate-spin" viewBox="0 0 24 24" aria-hidden="true">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z" />
+            </svg>
+            <span className="text-sm font-medium text-gray-800">Waiting for server…</span>
+          </div>
+        </div>
+      )}
       {/* Collapsed control bar - Centered */}
       {!open && (
         <button
@@ -177,7 +218,7 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
               className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100"
               disabled={loading}
             >
-              {isAgentPrompted ? 'No questions' : 'Cancel'}
+              {isAgentPrompted ? 'Skip' : 'Cancel'}
             </button>
             <button
               onClick={onSubmit}
