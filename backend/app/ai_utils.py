@@ -34,6 +34,7 @@ class SlideResponse(BaseModel):
     script: str
     ask_question: bool
     question: str
+    hypothesis_use: str
 
 
 def _split_into_sentences(text: str):
@@ -125,7 +126,8 @@ def lecture_step(lecture: Lecture, slide_num: int):
             if response.output_parsed.ask_question
             else None
         )
-        return {"script": script, "question": question}
+        hypothesis_use = response.output_parsed.hypothesis_use
+        return {"script": script, "question": question, "hypothesis_use": hypothesis_use}
 
     finally:
         if uploaded_slide is not None:
