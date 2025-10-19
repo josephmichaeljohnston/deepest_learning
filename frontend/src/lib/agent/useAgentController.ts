@@ -79,10 +79,12 @@ export function useAgentController(
       // Audio URLs are already available from the step fetch, safe to play
       const url = step.audioStreamUrl || step.audioUrl
       console.log('[playStep] Playing audio from:', url, step.audioStreamUrl ? '(stream)' : '(file)')
-      // Small delay for stream endpoints to avoid racing the backend DB commit / script availability
+      // Larger delay for stream endpoints to ensure backend has committed the slide to DB
+      // The /step endpoint calls OpenAI which can take 1-3 seconds, plus DB commit time
       if (url.includes('/audio-stream/')) {
         try {
-          await new Promise((r) => setTimeout(r, 200))
+          console.log('[playStep] Waiting for backend to commit slide to database...')
+          await new Promise((r) => setTimeout(r, 4000))
         } catch {}
       }
       try {
@@ -121,8 +123,14 @@ export function useAgentController(
 
         console.log('[agent.start] Starting lecture:', merged.lectureId, 'Total pages:', merged.totalPages)
         
-        // Fetch and play the first step
+        // Ensure a fresh run by resetting the backend lecture state before the first step
         const lectureId = typeof merged.lectureId === 'number' ? merged.lectureId : parseInt(String(merged.lectureId))
+        console.log('[agent.start] Resetting lecture state for a fresh run. lectureId:', lectureId)
+        try {
+          await fetch(`/api/backend/lectures/reset/${encodeURIComponent(String(lectureId))}`, { method: 'POST', cache: 'no-store' })
+        } catch (e) {
+          console.warn('[agent.start] Reset call failed (continuing anyway):', e)
+        }
         console.log('[agent.start] Calling fetchStepFromBackend with lectureId:', lectureId)
         const firstStep = await fetchStepFromBackend(lectureId, 1)
         console.log('[agent.start] First step fetched:', firstStep)

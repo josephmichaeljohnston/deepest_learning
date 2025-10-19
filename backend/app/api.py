@@ -98,6 +98,38 @@ class InstantiateLecture(Resource):
         return {"id": lecture.id, "message": "lecture instantiated"}, 201
 
 
+@ns.route("/reset/<int:lecture_id>")
+class ResetLecture(Resource):
+    def post(self, lecture_id: int):
+        """Reset a lecture to a clean state: remove slides and reset accumulated script and hypothesis.
+        This is useful to ensure a fresh run when the user hits Start Agent.
+        """
+        db_gen = get_db()
+        db = next(db_gen)
+        try:
+            lecture = db.query(Lecture).filter_by(id=lecture_id).first()
+            if not lecture:
+                api.abort(404, "lecture not found")
+
+            # Delete all slides for this lecture and reset accumulated script and hypothesis
+            db.query(Slide).filter_by(lecture_id=lecture_id).delete()
+            lecture.script = ""
+            lecture.lecture_hypothesis = (
+                "We have no knowledge of the user's understanding"
+            )
+
+            db.add(lecture)
+            db.commit()
+            db.refresh(lecture)
+
+            return {"message": "lecture reset", "id": lecture.id}, 200
+        finally:
+            try:
+                next(db_gen)
+            except StopIteration:
+                pass
+
+
 @ns.route("/step/<int:lecture_id>/<int:slide_num>")
 class StepResource(Resource):
     @api.response(200, "OK", step_response)
@@ -109,30 +141,46 @@ class StepResource(Resource):
             if not lecture:
                 api.abort(404, "lecture not found")
 
+            # If this is slide 1, clear all previous slides to start fresh
+            if slide_num == 1:
+                db.query(Slide).filter_by(lecture_id=lecture_id).delete()
+                lecture.script = ""  # Reset accumulated script
+                db.commit()
+
+            # Always compute fresh - call OpenAI to generate script
             result = lecture_step(lecture, slide_num)
-            if (
-                old_slide := db.query(Slide)
+            
+            # Check if slide already exists (shouldn't after cleanup above, but defensive)
+            slide = (
+                db.query(Slide)
                 .filter_by(lecture_id=lecture_id, slide_number=slide_num)
                 .first()
-            ):
-                slide = Slide(
-                    id=old_slide.id,
-                    script=result["script"],
-                    slide_number=slide_num,
-                    lecture_id=lecture_id,
-                    question=result["question"],
-                )
+            )
+            
+            if slide:
+                # Update existing slide with fresh content
+                slide.script = result["script"]
+                slide.question = result["question"]
             else:
+                # Create new slide
                 slide = Slide(
                     script=result["script"],
                     slide_number=slide_num,
                     lecture_id=lecture_id,
                     question=result["question"],
                 )
-            db.add(slide)
+                db.add(slide)
+            
+            # Update lecture script with accumulated context for future slides
+            if lecture.script:
+                lecture.script = lecture.script + "\n\n" + result["script"]
+            else:
+                lecture.script = result["script"]
+            
             db.add(lecture)
             db.commit()
             db.refresh(lecture)
+            db.refresh(slide)
 
             # audio_filename = slide_to_speech(slide)
             # slide.audio_path = audio_filename
