@@ -31,10 +31,14 @@ export async function fetchStepFromBackend(
   console.log('[fetchStepFromBackend] Response data:', data)
   const text: string = data?.text || `Slide ${pageNumber}`
   const question: string | undefined = data?.question
+  // Backend now returns both a hypothesis and a hypothesis_use
+  const hypothesis: string | undefined = data?.hypothesis ?? data?.hypothesis_use
+  const hypothesisUse: string | undefined = data?.hypothesis_use ?? data?.hypothesisUse
   // Estimate speaking time based on word count (min 4s, max 15s)
   const words = text.split(/\s+/).filter(Boolean).length
   const estimatedMs = Math.min(15000, Math.max(4000, Math.ceil((words / 2.5) * 1000)))
   const audioUrl = `/api/backend/lectures/audio/${encodeURIComponent(String(lectureId))}/${pageNumber}`
+  const audioStreamUrl = `/api/backend/lectures/audio-stream/${encodeURIComponent(String(lectureId))}/${pageNumber}`
   const audioStatusUrl = `/api/backend/lectures/audio-status/${encodeURIComponent(String(lectureId))}/${pageNumber}`
   
   console.log('[fetchStepFromBackend] Step fetched for page', pageNumber, '- Audio URL:', audioUrl)
@@ -42,9 +46,12 @@ export async function fetchStepFromBackend(
   return {
     page: pageNumber,
     transcript: text,
+    hypothesis,
+    hypothesisUse,
     question,
     ttsText: text,
-    audioUrl,
+  audioUrl,
+  audioStreamUrl,
     audioStatusUrl,
     label: `Slide ${pageNumber}`,
     speakMs: estimatedMs,

@@ -35,7 +35,6 @@ function ViewerPageInner() {
   const [totalPages, setTotalPages] = useState(0)
   const [disableControls, setDisableControls] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [jumpPage, setJumpPage] = useState<string>('')
   const [controlledPage, setControlledPage] = useState<number | undefined>(undefined)
   
   // Agent controller setup - fetches steps on-demand from backend and plays audio
@@ -49,7 +48,7 @@ function ViewerPageInner() {
   const agentOptions = useMemo(() => ({
     navigate: (p: number) => {
       console.log('[ViewerPage] navigate callback called for page:', p)
-      programmaticGoToPage(p)
+      setControlledPage(p)
     },
     onPrompt: (message?: string) => {
       console.log('[ViewerPage] onPrompt callback called with message:', message)
@@ -62,6 +61,12 @@ function ViewerPageInner() {
     pdfCarouselRef,
     agentBaseConfig,
     agentOptions
+  )
+
+  // Show a start-up spinner overlay only after Start is pressed, while loading/navigating before audio plays
+  const st = agent.state.status
+  const showStartOverlay = (st === 'fetching' || st === 'navigating') && (
+    agent.state.currentStepIndex < 0 // only before the first step exists
   )
 
   useEffect(() => {
@@ -95,34 +100,7 @@ function ViewerPageInner() {
     }, 3000)
   }
 
-  // Programmatic control functions (using carousel ref)
-  const programmaticNextPage = () => {
-    const ready = totalPages > 0
-    if (!ready) {
-      console.log('ProgrammaticNext blocked:', { totalPages })
-      return
-    }
-    setControlledPage(Math.min(currentPage + 1, totalPages))
-  }
-
-  const programmaticPrevPage = () => {
-    const ready = totalPages > 0
-    if (!ready) {
-      console.log('ProgrammaticPrev blocked:', { totalPages })
-      return
-    }
-    setControlledPage(Math.max(currentPage - 1, 1))
-  }
-
-  const programmaticGoToPage = (page: number) => {
-    const ready = totalPages > 0
-    if (!ready) {
-      console.log('ProgrammaticGoTo blocked:', { page, totalPages })
-      return
-    }
-    const clamped = Math.max(1, Math.min(page, totalPages))
-    setControlledPage(clamped)
-  }
+  // Manual navigation helpers removed
 
   // Disable manual controls while agent is busy
   useEffect(() => {
@@ -136,6 +114,17 @@ function ViewerPageInner() {
 
   return (
       <div className="w-screen h-screen bg-gray-50 flex flex-col">
+        {showStartOverlay && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
+            <div className="px-4 py-3 rounded-lg bg-white shadow flex items-center gap-3">
+              <svg className="h-5 w-5 text-amber-600 animate-spin" viewBox="0 0 24 24" aria-hidden="true">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z" />
+              </svg>
+              <span className="text-sm font-medium text-gray-800">Loading</span>
+            </div>
+          </div>
+        )}
         {/* Dev Controls Sidebar */}
         <DevControlsSidebar
           agent={agent}
@@ -144,11 +133,6 @@ function ViewerPageInner() {
           currentPage={currentPage}
           totalPages={totalPages}
           loadError={loadError}
-          programmaticNextPage={programmaticNextPage}
-          programmaticPrevPage={programmaticPrevPage}
-          programmaticGoToPage={programmaticGoToPage}
-          jumpPage={jumpPage}
-          setJumpPage={setJumpPage}
         />
 
         {/* Header - Centered title */}
@@ -168,7 +152,7 @@ function ViewerPageInner() {
           <PdfCarousel
             ref={pdfCarouselRef}
             pdfUrl={pdfUrl}
-            showControls={true}
+            showControls={false}
             disableControls={disableControls}
             onPageChange={handlePageChange}
             onDocumentLoadSuccess={handleDocumentLoad}

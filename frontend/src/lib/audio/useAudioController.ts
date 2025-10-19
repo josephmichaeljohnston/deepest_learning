@@ -79,6 +79,15 @@ export function useAudioController(): AudioController {
     audio.addEventListener('timeupdate', onTime)
     audio.addEventListener('ended', onEnded)
     audio.addEventListener('error', onError)
+    // Helpful buffering logs similar to provided snippet
+    const onProgress = () => {
+      console.log('[useAudioController] Buffering...', audio.buffered.length, 'ranges')
+    }
+    const onCanPlay = () => {
+      console.log('[useAudioController] Can start playing!')
+    }
+    audio.addEventListener('progress', onProgress)
+    audio.addEventListener('canplay', onCanPlay)
 
     return () => {
       audio.pause()
@@ -86,6 +95,8 @@ export function useAudioController(): AudioController {
       audio.removeEventListener('timeupdate', onTime)
       audio.removeEventListener('ended', onEnded)
       audio.removeEventListener('error', onError)
+      audio.removeEventListener('progress', onProgress)
+      audio.removeEventListener('canplay', onCanPlay)
       audioRef.current = null
     }
   }, [])
@@ -100,15 +111,19 @@ export function useAudioController(): AudioController {
     setStatus('loading')
     console.log('[useAudioController] Loading audio from:', url)
     audio.pause()
-    // Wait until the backend serves the audio file (poll the same URL)
-    try {
-      await waitForAudioAvailable(url)
-      console.log('[useAudioController] Audio is ready, starting playback')
-    } catch (e: any) {
-      console.error('[useAudioController] Audio never became ready:', e?.message)
-      setStatus('error')
-      setError(e?.message || 'Audio generation timeout')
-      return
+    // If using a stream endpoint, skip polling and assign src immediately
+    const isStream = url.includes('/audio-stream/')
+    if (!isStream) {
+      // Wait until the backend serves the audio file (poll the same URL)
+      try {
+        await waitForAudioAvailable(url)
+        console.log('[useAudioController] Audio is ready, starting playback')
+      } catch (e: any) {
+        console.error('[useAudioController] Audio never became ready:', e?.message)
+        setStatus('error')
+        setError(e?.message || 'Audio generation timeout')
+        return
+      }
     }
 
     audio.src = url

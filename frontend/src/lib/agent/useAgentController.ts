@@ -74,12 +74,17 @@ export function useAgentController(
       setState((s) => ({ ...s, status: 'navigating' }))
       console.log('[playStep] Navigating to page:', step.page)
       await navigateTo(step.page)
-      setState((s) => ({ ...s, status: 'playing' }))
       // Play audio only - no Web Speech API
-      console.log('[playStep] Playing audio from:', step.audioUrl)
-      audio.play(step.audioUrl, step.audioStatusUrl).catch((err) => {
+      const url = step.audioStreamUrl || step.audioUrl
+      console.log('[playStep] Playing audio from:', url, step.audioStreamUrl ? '(stream)' : '(file)')
+      try {
+        await audio.play(url, step.audioStreamUrl ? undefined : step.audioStatusUrl)
+        console.log('[playStep] Audio started. Switching status to playing')
+        setState((s) => ({ ...s, status: 'playing' }))
+      } catch (err: any) {
         console.error('[playStep] Audio playback failed:', err?.message || err)
-      })
+        setState((s) => ({ ...s, status: 'error', error: err?.message || 'Audio playback failed' }))
+      }
     },
     [audio, navigateTo]
   )
@@ -94,7 +99,7 @@ export function useAgentController(
         audio.stop()
       } catch {}
       
-      setState((s) => ({ ...s, status: 'fetching', error: undefined }))
+      setState((s) => ({ ...s, status: 'fetching', error: undefined, isStarting: true }))
       try {
         const merged = { ...baseConfig, ...cfg }
         console.log('[agent.start] Merged config:', merged)
@@ -113,11 +118,13 @@ export function useAgentController(
         console.log('[agent.start] Calling fetchStepFromBackend with lectureId:', lectureId)
         const firstStep = await fetchStepFromBackend(lectureId, 1)
         console.log('[agent.start] First step fetched:', firstStep)
-        setState({ status: 'navigating', currentStepIndex: 0, steps: [firstStep] })
+        setState({ status: 'navigating', currentStepIndex: 0, steps: [firstStep], isStarting: true })
         await playStep(firstStep)
+        // playStep only resolves after audio.play() has started; clear starting flag
+        setState((s) => ({ ...s, isStarting: false }))
       } catch (e: any) {
         console.error('[agent.start] Error:', e?.message || e)
-        setState((s) => ({ ...s, status: 'error', error: e?.message || 'Unknown error' }))
+        setState((s) => ({ ...s, status: 'error', error: e?.message || 'Unknown error', isStarting: false }))
       }
     },
     [audio, baseConfig, playStep]

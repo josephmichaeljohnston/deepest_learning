@@ -176,7 +176,7 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z" />
             </svg>
-            <span className="text-sm font-medium text-gray-800">Waiting for server…</span>
+            <span className="text-sm font-medium text-gray-800">Loading</span>
           </div>
         </div>
       )}

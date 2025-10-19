@@ -9,11 +9,11 @@ interface Props {
 }
 
 export default function AgentControlPanel({ agent, ready = true }: Props) {
-  const { state, currentStep, progress } = agent
-  const hasLecture = Boolean((agent as any)?.state?.steps) // not reliable; we'll gate by status + ready; final guard on start throws if missing in controller
-  const disableStart = !ready || state.status === 'playing' || state.status === 'navigating' || state.status === 'fetching'
-  const canPause = state.status === 'playing'
-  const canResume = state.status === 'paused'
+  const { state, currentStep } = agent
+  // Enable Start only when no active session is running
+  const canStart =
+    ready && (state.status === 'idle' || state.status === 'stopped' || state.status === 'completed' || state.status === 'error')
+  // Removed manual pause/resume controls from dev tools
 
   return (
     <div className="border-t pt-6">
@@ -21,27 +21,13 @@ export default function AgentControlPanel({ agent, ready = true }: Props) {
       <div className="flex flex-wrap gap-3">
         <button
           onClick={() => agent.start()}
-          disabled={disableStart}
+          disabled={!canStart}
           className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
         >
           {state.status === 'fetching' ? 'Starting…' : 'Start Agent'}
         </button>
 
-        <button
-          onClick={() => agent.pause()}
-          disabled={!canPause}
-          className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-        >
-          Pause
-        </button>
-
-        <button
-          onClick={() => agent.resume()}
-          disabled={!canResume}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-        >
-          Resume
-        </button>
+        {/* Pause/Resume controls removed */}
 
         <button
           onClick={() => agent.stop()}
@@ -69,39 +55,9 @@ export default function AgentControlPanel({ agent, ready = true }: Props) {
           </p>
         )}
 
-        {/* Simulated speech progress bar */}
-        {currentStep && (
-          <div className="mt-3">
-            <div className="flex justify-between text-xs text-gray-600 mb-1">
-              <span>Speech Progress</span>
-              <span>{Math.round(progress * 100)}%</span>
-            </div>
-            <div className="w-full h-2 rounded bg-white border border-blue-200 overflow-hidden">
-              <div
-                className="h-full bg-blue-600 transition-[width] duration-100 ease-linear"
-                style={{ width: `${Math.round(progress * 100)}%` }}
-              />
-            </div>
-          </div>
-        )}
+        {/* Progress tracking removed from dev tools */}
 
-        {state.steps.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {state.steps.map((s, i) => (
-              <button
-                key={`${s.page}-${i}`}
-                onClick={() => agent.jumpTo(i)}
-                className={`px-3 py-1 rounded border text-sm ${
-                  i === state.currentStepIndex
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {s.label ?? `Page ${s.page}`}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Slide jump buttons removed to prevent manual skipping */}
       </div>
     </div>
   )
