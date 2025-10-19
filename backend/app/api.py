@@ -53,21 +53,35 @@ class InstantiateLecture(Resource):
         if not uploaded_file:
             api.abort(400, "file is required")
 
-        # Save the uploaded file locally
+        # Save the uploaded file locally (always same filename - single file system)
         filename = secure_filename("uploaded.pdf")
         file_path = os.path.join(UPLOAD_FOLDER, filename)
         uploaded_file.save(file_path)
 
-        # Store the file path in the database
+        # Single-file system: always use lecture ID 1
         db_gen = get_db()
         db = next(db_gen)
         try:
-            lecture = Lecture(
-                title=filename,
-                pdf_path=file_path,
-                lecture_hypothesis="We have no knowledge of the user's understanding",
-            )
-            db.add(lecture)
+            # Check if lecture with ID 1 already exists
+            lecture = db.query(Lecture).filter_by(id=1).first()
+            if lecture:
+                # Delete old slides to start fresh
+                db.query(Slide).filter_by(lecture_id=1).delete()
+                db.commit()
+                # Update existing lecture
+                lecture.title = filename
+                lecture.pdf_path = file_path
+                db.add(lecture)
+            else:
+                # Create new lecture with ID 1
+                lecture = Lecture(
+                    id=1,
+                    title=filename,
+                    pdf_path=file_path,
+                    lecture_hypothesis="We have no knowledge of the user's understanding",
+                )
+                db.add(lecture)
+            
             db.commit()
             db.refresh(lecture)
         finally:
@@ -76,7 +90,7 @@ class InstantiateLecture(Resource):
             except StopIteration:
                 pass
 
-        return {"id": lecture.id, "message": "lecture instantiated"}, 201
+        return {"id": 1, "message": "lecture instantiated"}, 201
 
 
 @ns.route("/step/<int:lecture_id>/<int:slide_num>")
