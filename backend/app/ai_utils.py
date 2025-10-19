@@ -139,7 +139,7 @@ def slide_to_speech(slide: Slide):
     output_dir = os.path.join(backend_root, "speech_outputs")
     os.makedirs(output_dir, exist_ok=True)
 
-    output_path = os.path.join(output_dir, f"{slide.id}.wav")
+    output_path = os.path.join(output_dir, f"{slide.slide_number}-{slide.lecture_id}.wav")
 
     # split script into sentences and synthesize one by one
     sentences = _split_into_sentences(slide.script or "")
