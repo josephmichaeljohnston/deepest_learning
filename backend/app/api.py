@@ -6,7 +6,7 @@ from .models import Lecture, Slide
 import os
 import mimetypes
 from werkzeug.utils import secure_filename
-from .ai_utils import slide_to_speech, get_answer_feedback
+from .ai_utils import slide_to_speech, get_answer_feedback, user_ask_question
 
 api = Api(
     title="Deepest Learning API",
@@ -31,13 +31,31 @@ lecture_response = api.model(
 
 step_response = api.model(
     "StepResponse",
-    {"id": fields.Integer(), "slide": fields.Integer(), "text": fields.String()},
+    {
+        "id": fields.Integer(),
+        "slide": fields.Integer(),
+        "text": fields.String(),
+        "question": fields.String(),
+        "hypothesis_use": fields.String(),
+    },
 )
 
 answer_request = api.model("AnswerRequest", {"answer": fields.String(required=True)})
 answer_response = api.model(
     "AnswerResponse",
-    {"id": fields.Integer(), "slide": fields.Integer(), "answer": fields.String()},
+    {
+        "feedback": fields.String(),
+        "correct": fields.String(),
+        "hypothesis": fields.String(),
+    },
+)
+
+question_request = api.model(
+    "QuestionRequest", {"question": fields.String(required=True)}
+)
+question_response = api.model(
+    "QuestionResponse",
+    {"answer": fields.String(), "hypothesis": fields.String()},
 )
 
 UPLOAD_FOLDER = "uploads"  # Directory to store uploaded PDFs
@@ -53,35 +71,21 @@ class InstantiateLecture(Resource):
         if not uploaded_file:
             api.abort(400, "file is required")
 
-        # Save the uploaded file locally (always same filename - single file system)
+        # Save the uploaded file locally
         filename = secure_filename("uploaded.pdf")
         file_path = os.path.join(UPLOAD_FOLDER, filename)
         uploaded_file.save(file_path)
 
-        # Single-file system: always use lecture ID 1
+        # Store the file path in the database
         db_gen = get_db()
         db = next(db_gen)
         try:
-            # Check if lecture with ID 1 already exists
-            lecture = db.query(Lecture).filter_by(id=1).first()
-            if lecture:
-                # Delete old slides to start fresh
-                db.query(Slide).filter_by(lecture_id=1).delete()
-                db.commit()
-                # Update existing lecture
-                lecture.title = filename
-                lecture.pdf_path = file_path
-                db.add(lecture)
-            else:
-                # Create new lecture with ID 1
-                lecture = Lecture(
-                    id=1,
-                    title=filename,
-                    pdf_path=file_path,
-                    lecture_hypothesis="We have no knowledge of the user's understanding",
-                )
-                db.add(lecture)
-            
+            lecture = Lecture(
+                title=filename,
+                pdf_path=file_path,
+                lecture_hypothesis="We have no knowledge of the user's understanding",
+            )
+            db.add(lecture)
             db.commit()
             db.refresh(lecture)
         finally:
@@ -90,7 +94,7 @@ class InstantiateLecture(Resource):
             except StopIteration:
                 pass
 
-        return {"id": 1, "message": "lecture instantiated"}, 201
+        return {"id": lecture.id, "message": "lecture instantiated"}, 201
 
 
 @ns.route("/step/<int:lecture_id>/<int:slide_num>")
@@ -124,10 +128,11 @@ class StepResource(Resource):
             db.refresh(slide)
 
             return {
-                "id": lecture_id,
+                "id": slide.id,
                 "slide": slide_num,
                 "text": slide.script,
                 "question": result["question"],
+                "hypothesis_use": result["hypothesis_use"],
             }
         finally:
             try:
@@ -163,8 +168,12 @@ class AnswerResource(Resource):
         feedback = result["feedback"]
         correct = result["correct"]
         hypothesis = result["hypothesis"]
+
+        lecture.lecture_hypothesis = hypothesis
+        db.add(lecture)
+        db.commit()
+        db.refresh(lecture)
         return {
-            "id": lecture_id,
             "feedback": feedback,
             "correct": correct,
             "hypothesis": hypothesis,
@@ -182,53 +191,21 @@ class AudioResource(Resource):
                 .filter_by(lecture_id=lecture_id, slide_number=slide_num)
                 .first()
             )
-
-            backend_root = os.path.dirname(os.path.dirname(__file__))
-
-            # Helper to attempt direct file serve by convention
-            def try_send_conventional():
-                candidates = [
-                    os.path.join(backend_root, "speech_outputs", f"{slide_num}-{lecture_id}.wav"),
-                    os.path.join(
-                        backend_root, "speech_outputs", f"lecture_{lecture_id}_slide_{slide_num}.wav"
-                    ),
-                ]
-                for p in candidates:
-                    if os.path.isfile(p):
-                        mime_type, _ = mimetypes.guess_type(p)
-                        return send_file(
-                            p,
-                            mimetype=mime_type or "audio/wav",
-                            as_attachment=False,
-                        )
-                return None
-
             if not slide:
-                # Fallback: DB was reset but file may exist on disk
-                resp = try_send_conventional()
-                if resp is not None:
-                    return resp
                 api.abort(404, "slide not found")
 
             audio_path = slide.audio_path
             if not audio_path:
-                # Fallback to conventional path if DB record lacks audio_path
-                resp = try_send_conventional()
-                if resp is not None:
-                    return resp
                 api.abort(404, "audio not available for this slide")
 
             # resolve relative paths against backend root
             if os.path.isabs(audio_path):
                 resolved_path = audio_path
             else:
+                backend_root = os.path.dirname(os.path.dirname(__file__))
                 resolved_path = os.path.join(backend_root, audio_path)
 
             if not os.path.isfile(resolved_path):
-                # Final fallback attempt
-                resp = try_send_conventional()
-                if resp is not None:
-                    return resp
                 api.abort(404, "audio file not found")
 
             mime_type, _ = mimetypes.guess_type(resolved_path)
@@ -244,15 +221,13 @@ class AudioResource(Resource):
                 pass
 
 
-ns.route("/user-question/<int:lecture_id>/<int:slide_num>")
-
-
+@ns.route("/user-question/<int:lecture_id>/<int:slide_num>")
 class UserQuestionResource(Resource):
     @api.expect(answer_request)
     @api.response(200, "OK", answer_response)
     def post(self, lecture_id, slide_num):
         payload = request.get_json() or {}
-        question = payload.get("answer")
+        question = payload.get("question")
         if not question:
             api.abort(400, "question required")
         db_gen = get_db()
@@ -269,13 +244,13 @@ class UserQuestionResource(Resource):
         if not slide:
             api.abort(404, "slide not found")
 
-        result = get_answer_feedback(
-            question, "", lecture.lecture_hypothesis, is_user_question=True
-        )
-        feedback = result["feedback"]
+        result = user_ask_question(slide.script, question, lecture.lecture_hypothesis)
         hypothesis = result["hypothesis"]
+        lecture.lecture_hypothesis = hypothesis
+        db.add(lecture)
+        db.commit()
+        db.refresh(lecture)
         return {
-            "id": lecture_id,
-            "feedback": feedback,
+            "answer": result["answer"],
             "hypothesis": hypothesis,
         }

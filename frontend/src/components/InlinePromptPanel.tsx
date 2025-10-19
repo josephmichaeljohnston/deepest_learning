@@ -89,24 +89,38 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
     setError(null)
     setResponse(null)
     try {
-      const url = new URL('/api/qa', window.location.origin)
-      // Try to pass context to backend
+      // Determine context
       const search = new URLSearchParams(window.location.search)
       const lecture = search.get('lecture')
       const slide = String(agent.currentStep?.page ?? '')
-      if (lecture) url.searchParams.set('lecture', lecture)
-      if (slide) url.searchParams.set('slide', slide)
-      const res = await fetch(url.toString(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: value })
-      })
-      if (!res.ok) throw new Error('Failed to submit question')
-      const data = await res.json()
-      if (!data?.answer) {
-        throw new Error('No answer returned from backend')
+      if (!lecture || !slide) throw new Error('Missing lecture/slide context')
+
+      let res: Response
+      if (isAgentPrompted) {
+        // Agent prompted: user is answering the slide question -> send to /answer
+        const url = `/api/backend/lectures/answer/${encodeURIComponent(lecture)}/${encodeURIComponent(slide)}`
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answer: value }),
+        })
+        if (!res.ok) throw new Error('Failed to submit answer')
+        const data = await res.json()
+        // Backend returns feedback/correct/hypothesis
+        setResponse(data.feedback ?? JSON.stringify(data))
+      } else {
+        // Manual user question: forward to user-question endpoint which returns an answer
+        const url = `/api/backend/lectures/user-question/${encodeURIComponent(lecture)}/${encodeURIComponent(slide)}`
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: value }),
+        })
+        if (!res.ok) throw new Error('Failed to submit question')
+        const data = await res.json()
+        if (!data?.answer) throw new Error('No answer returned from backend')
+        setResponse(data.answer)
       }
-      setResponse(data.answer)
       // Close after short delay and clear input, then resume agent
       setTimeout(() => {
         setOpen(false)
