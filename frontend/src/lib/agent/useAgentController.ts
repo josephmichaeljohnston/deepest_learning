@@ -79,6 +79,12 @@ export function useAgentController(
       // Audio URLs are already available from the step fetch, safe to play
       const url = step.audioStreamUrl || step.audioUrl
       console.log('[playStep] Playing audio from:', url, step.audioStreamUrl ? '(stream)' : '(file)')
+      // Small delay for stream endpoints to avoid racing the backend DB commit / script availability
+      if (url.includes('/audio-stream/')) {
+        try {
+          await new Promise((r) => setTimeout(r, 200))
+        } catch {}
+      }
       try {
         await audio.play(url, step.audioStreamUrl ? undefined : step.audioStatusUrl)
         console.log('[playStep] Audio started. Switching status to playing')
