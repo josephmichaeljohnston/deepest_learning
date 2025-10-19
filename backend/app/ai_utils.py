@@ -104,10 +104,10 @@ def lecture_step(lecture: Lecture, slide_num: int):
                         {
                             "type": "input_text",
                             "text": (
-                                lecture_intro_prompt("", "")
+                                lecture_intro_prompt("", lecture.lecture_hypothesis)
                                 if slide_num == 1
-                                else lecture_step_prompt(lecture.script, "", "")
-                            ),  # TODO: add student and lecture hypotheses
+                                else lecture_step_prompt(lecture.script, "", lecture.lecture_hypothesis)
+                            ),  # TODO: add student hypotheses
                         },
                         {
                             "type": "input_file",
