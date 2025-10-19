@@ -31,7 +31,13 @@ lecture_response = api.model(
 
 step_response = api.model(
     "StepResponse",
-    {"id": fields.Integer(), "slide": fields.Integer(), "text": fields.String()},
+    {
+        "id": fields.Integer(),
+        "slide": fields.Integer(),
+        "text": fields.String(),
+        "question": fields.String(),
+        "hypothesis_use": fields.String(),
+    },
 )
 
 answer_request = api.model("AnswerRequest", {"answer": fields.String(required=True)})
@@ -126,6 +132,7 @@ class StepResource(Resource):
                 "slide": slide_num,
                 "text": slide.script,
                 "question": result["question"],
+                "hypothesis_use": result["hypothesis_use"],
             }
         finally:
             try:
