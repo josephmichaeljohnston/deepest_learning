@@ -7,14 +7,49 @@ export interface AudioController {
   error?: string
   duration: number
   currentTime: number
-  play: (url: string) => Promise<void>
+  play: (url: string, statusUrl?: string) => Promise<void>
   pause: () => void
   resume: () => void
   stop: () => void
 }
 
-// Tiny pre-generated wav beep (approx 0.2s). Kept as base64 for reliability and to avoid CORS.
-const BEEP_DATA_URI = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQwAAAABAQH///8='
+// Helper function to poll for audio readiness
+async function waitForAudioReady(statusUrl: string, maxWaitMs: number = 30000): Promise<boolean> {
+  const pollIntervalMs = 200
+  const startTime = Date.now()
+
+  while (Date.now() - startTime < maxWaitMs) {
+    try {
+      const res = await fetch(statusUrl)
+      if (!res.ok) {
+        console.warn('[waitForAudioReady] Status check returned:', res.status)
+        await new Promise((r) => setTimeout(r, pollIntervalMs))
+        continue
+      }
+
+      const data = await res.json()
+      console.log('[waitForAudioReady] Audio status:', data.status, 'ready:', data.ready)
+
+      if (data.ready === true) {
+        return true
+      }
+
+      if (data.status === 'error' || data.status === 'not_found') {
+        throw new Error(`Audio generation failed: ${data.status}`)
+      }
+
+      // Still generating, wait and retry
+      await new Promise((r) => setTimeout(r, pollIntervalMs))
+    } catch (e: any) {
+      console.error('[waitForAudioReady] Error checking status:', e?.message)
+      throw e
+    }
+  }
+
+  throw new Error(`Audio not ready after ${maxWaitMs}ms`)
+}
+
+// No audio fallbacks; require valid stream/URL from backend
 
 export function useAudioController(): AudioController {
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -25,14 +60,24 @@ export function useAudioController(): AudioController {
 
   useEffect(() => {
     const audio = new Audio()
+    // Enable preloading to allow HTTPAudioElement to request ranges
+    audio.preload = 'auto'
     audioRef.current = audio
 
-    const onLoaded = () => setDuration(audio.duration || 0)
+    const onLoaded = () => {
+      console.log('[useAudioController] Metadata loaded. Duration:', audio.duration)
+      setDuration(audio.duration || 0)
+    }
     const onTime = () => setCurrentTime(audio.currentTime)
-    const onEnded = () => setStatus('idle')
+    const onEnded = () => {
+      console.log('[useAudioController] Audio ended')
+      setStatus('idle')
+    }
     const onError = () => {
+      const errorMsg = `Audio error: ${audio.error?.message || 'Unknown error'}`
+      console.error('[useAudioController]', errorMsg)
       setStatus('error')
-      setError('Failed to load audio')
+      setError(errorMsg)
     }
 
     audio.addEventListener('loadedmetadata', onLoaded)
@@ -50,26 +95,42 @@ export function useAudioController(): AudioController {
     }
   }, [])
 
-  const play = useCallback(async (url: string) => {
+  const play = useCallback(async (url: string, statusUrl?: string) => {
     const audio = audioRef.current
-    if (!audio) return
+    if (!audio) {
+      console.error('[useAudioController] Audio element not ready')
+      return
+    }
     setError(undefined)
     setStatus('loading')
+    console.log('[useAudioController] Loading audio from:', url)
     audio.pause()
     audio.src = url
+    
+    // If statusUrl provided, wait for backend to signal audio is ready
+    if (statusUrl) {
+      console.log('[useAudioController] Waiting for audio to be ready via:', statusUrl)
+      try {
+        await waitForAudioReady(statusUrl)
+        console.log('[useAudioController] Audio is ready, starting playback')
+      } catch (e: any) {
+        console.error('[useAudioController] Audio never became ready:', e?.message)
+        setStatus('error')
+        setError(e?.message || 'Audio generation timeout')
+        return
+      }
+    }
+
+    // Try to play
     try {
       await audio.play()
+      console.log('[useAudioController] Audio playing successfully')
       setStatus('playing')
-    } catch (e) {
-      // Try the data beep fallback if autoplay restrictions or CORS issues occur
-      try {
-        audio.src = BEEP_DATA_URI
-        await audio.play()
-        setStatus('playing')
-      } catch (e2) {
-        setStatus('error')
-        setError('Audio playback failed')
-      }
+    } catch (e: any) {
+      console.error('[useAudioController] Playback failed:', e?.message || e)
+      setStatus('error')
+      const msg = e?.message || 'Audio playback failed'
+      setError(msg)
     }
   }, [])
 

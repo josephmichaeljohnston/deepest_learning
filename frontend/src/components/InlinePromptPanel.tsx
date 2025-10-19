@@ -103,7 +103,10 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
       })
       if (!res.ok) throw new Error('Failed to submit question')
       const data = await res.json()
-      setResponse(data.answer || 'Received. Thank you!')
+      if (!data?.answer) {
+        throw new Error('No answer returned from backend')
+      }
+      setResponse(data.answer)
       // Close after short delay and clear input, then resume agent
       setTimeout(() => {
         setOpen(false)

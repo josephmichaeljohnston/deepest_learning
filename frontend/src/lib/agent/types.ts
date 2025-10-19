@@ -15,6 +15,8 @@ export interface AgentStep {
   page: number
   // Publicly accessible audio file URL returned by an API
   audioUrl: string
+  // URL to check audio generation status (optional, enables polling)
+  audioStatusUrl?: string
   // Optional transcript to display while audio plays
   transcript?: string
   // Optional text to speak using Web Speech API
@@ -28,9 +30,9 @@ export interface AgentStep {
 export interface AgentSessionConfig {
   filename: string
   totalPages: number
-  strategy?: 'scripted' | 'linear' | 'random'
   pdfUrl?: string
   lectureId?: number | string
+  startPage?: number
 }
 
 export interface AgentControllerState {

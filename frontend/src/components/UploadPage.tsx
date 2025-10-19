@@ -16,12 +16,12 @@ export default function UploadPage() {
 
     // Create a temporary URL for the file to use in the viewer
     const fileUrl = URL.createObjectURL(fileToUpload)
-    
+
     try {
       const formData = new FormData()
       formData.append('file', fileToUpload)
 
-      // Save file to local uploads for viewing, and also forward to backend to create a Lecture
+      // Save file to local uploads for viewing
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
@@ -30,59 +30,37 @@ export default function UploadPage() {
       const data = await response.json()
 
       if (response.ok) {
-        const duplicateMsg = data.isDuplicate ? ' (using existing file)' : ''
-        setMessage(`File uploaded successfully${duplicateMsg}! Redirecting...`)
-        // In parallel, ask backend to instantiate this lecture
-        try {
-          const backendRes = await fetch('/api/backend/lectures/instantiate-lecture', {
-            method: 'POST',
-            body: formData,
-          })
-          if (backendRes.ok) {
-            const lecture = await backendRes.json()
-            // Navigate to viewer page after successful upload
-            setTimeout(() => {
-              try {
-                sessionStorage.setItem('pdfFileUrl', fileUrl)
-                sessionStorage.setItem('pdfFileName', fileToUpload.name)
-              } catch {}
-              router.push(`/viewer?file=${encodeURIComponent(data.filename)}&lecture=${encodeURIComponent(String(lecture.id))}`)
-            }, 500)
-            return
-          }
-        } catch (e) {
-          // Fall through to local mode
+        setMessage(`File uploaded successfully! Creating lecture...`)
+        // Upload to backend
+        const backendRes = await fetch('/api/backend/lectures/instantiate-lecture', {
+          method: 'POST',
+          body: formData,
+        })
+        if (!backendRes.ok) {
+          setMessage('Backend connection failed. Please ensure backend is running.')
+          setUploading(false)
+          return
         }
-        // Backend instantiate failed: still open viewer locally
+        
+        const lecture = await backendRes.json()
+        console.log('[UploadPage] Lecture created with ID:', lecture.id)
+        
+        // Navigate to viewer with lecture id (always 1 in single-file system)
         setTimeout(() => {
-          // Also store local file info for potential fallback in viewer
           try {
             sessionStorage.setItem('pdfFileUrl', fileUrl)
             sessionStorage.setItem('pdfFileName', fileToUpload.name)
           } catch {}
-          // Prefer server-served filename; viewer will construct /api/pdf/<filename>
-          router.push(`/viewer?file=${encodeURIComponent(data.filename)}&mode=local`)
-        }, 500)
+          router.push(`/viewer?file=${encodeURIComponent(data.filename)}&lecture=${encodeURIComponent(String(lecture.id))}`)
+        }, 400)
       } else {
-        // If upload fails, still allow viewing with the local file
-        setMessage(`Backend not ready. Viewing file locally...`)
-        setTimeout(() => {
-          // Store file URL in sessionStorage for the viewer to access
-          sessionStorage.setItem('pdfFileUrl', fileUrl)
-          sessionStorage.setItem('pdfFileName', fileToUpload.name)
-          router.push(`/viewer?file=${encodeURIComponent(fileToUpload.name)}&mode=local`)
-        }, 800)
+        setMessage(`Upload failed. Please try again.`)
+        setUploading(false)
       }
     } catch (error) {
-      // If there's a network error, still allow viewing with the local file
-      console.log('Upload failed, viewing locally:', error)
-      setMessage(`Backend not ready. Viewing file locally...`)
-      setTimeout(() => {
-        // Store file URL in sessionStorage for the viewer to access
-        sessionStorage.setItem('pdfFileUrl', fileUrl)
-        sessionStorage.setItem('pdfFileName', fileToUpload.name)
-        router.push(`/viewer?file=${encodeURIComponent(fileToUpload.name)}&mode=local`)
-      }, 800)
+      console.log('Upload failed:', error)
+      setMessage(`Upload failed. Please try again.`)
+      setUploading(false)
     }
   }
 

@@ -1,4 +1,9 @@
 from app import create_app
+import sys
+
+# Ensure unbuffered output so logs appear immediately in Docker
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 app = create_app()
 

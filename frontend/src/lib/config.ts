@@ -1,4 +1,5 @@
 // Centralized configuration for backend connectivity
-// On a single laptop, default to localhost:8000 where Flask runs.
+// Backend URL can be configured via NEXT_PUBLIC_BACKEND_URL environment variable
+// Default to localhost:8000 where Flask runs (works for both Docker and local)
 
-export const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:8000'
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'

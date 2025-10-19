@@ -8,6 +8,7 @@ import InlinePromptPanel, { InlinePromptPanelHandle } from '@/components/InlineP
 import DevControlsSidebar from '@/components/DevControlsSidebar'
 import { useAgentController } from '@/lib/agent/useAgentController'
 import type { AgentSessionConfig } from '@/lib/agent/types'
+import { BACKEND_URL } from '@/lib/config'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,6 @@ function ViewerPageInner() {
   const inlinePromptRef = useRef<InlinePromptPanelHandle>(null)
   
   const filename = searchParams.get('file')
-  const mode = searchParams.get('mode')
   const lectureId = searchParams.get('lecture')
   const [pdfUrl, setPdfUrl] = useState<string>('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -39,13 +39,13 @@ function ViewerPageInner() {
   const [jumpPage, setJumpPage] = useState<string>('')
   const [controlledPage, setControlledPage] = useState<number | undefined>(undefined)
   
-  // Agent controller setup (simulated API plan + audio playback)
+  // Agent controller setup - fetches steps on-demand from backend and plays audio
   const agentBaseConfig = useMemo<AgentSessionConfig>(() => ({
     filename: decodeURIComponent(filename || ''),
     totalPages: totalPages || 0,
     pdfUrl: pdfUrl || undefined,
     lectureId: lectureId ? Number(lectureId) : undefined,
-  }), [filename, totalPages, pdfUrl])
+  }), [filename, totalPages, pdfUrl, lectureId])
   // Memoize the agent controller options to ensure stable references
   const agentOptions = useMemo(() => ({
     navigate: (p: number) => {
@@ -66,25 +66,33 @@ function ViewerPageInner() {
   )
 
   useEffect(() => {
-    // Redirect if no filename provided
-    if (!filename) {
+    // Redirect if no filename or lecture provided
+    if (!filename || !lectureId) {
       router.push('/')
       return
     }
 
-    // Check if we're in local mode (backend not ready)
-    if (mode === 'local') {
-      const localFileUrl = sessionStorage.getItem('pdfFileUrl')
-      if (localFileUrl) {
-        setPdfUrl(localFileUrl)
-      } else {
-        router.push('/')
+    // Use the API endpoint; ensure filename is URL-encoded for safe path usage
+    setPdfUrl(`/api/pdf/${encodeURIComponent(filename)}`)
+    
+    // Check backend connectivity
+    const checkBackend = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/health`)
+        if (!res.ok) {
+          console.warn('[ViewerPage] Backend health check failed')
+          setLoadError('Backend disconnected. Redirecting to upload...')
+          setTimeout(() => router.push('/'), 2000)
+        }
+      } catch (e) {
+        console.error('[ViewerPage] Backend connection failed:', e)
+        setLoadError('Backend disconnected. Redirecting to upload...')
+        setTimeout(() => router.push('/'), 2000)
       }
-    } else {
-      // Use the API endpoint; ensure filename is URL-encoded for safe path usage
-      setPdfUrl(`/api/pdf/${encodeURIComponent(filename)}`)
     }
-  }, [filename, mode, router])
+    
+    checkBackend()
+  }, [filename, lectureId, router])
 
   const handlePageChange = (current: number, total: number) => {
     setCurrentPage(current)
@@ -100,13 +108,7 @@ function ViewerPageInner() {
   const handleDocumentLoadError = (error: Error) => {
     console.error('Viewer load error:', error)
     setLoadError('Failed to load from server')
-    // Attempt fallback to local sessionStorage if present and not already in local mode
-    if (mode !== 'local') {
-      const localFileUrl = sessionStorage.getItem('pdfFileUrl')
-      if (localFileUrl) {
-        setPdfUrl(localFileUrl)
-      }
-    }
+    // No local fallback: require server to serve the PDF
   }
 
   // Programmatic control functions (using carousel ref)
@@ -154,6 +156,7 @@ function ViewerPageInner() {
         <DevControlsSidebar
           agent={agent}
           ready={totalPages > 0}
+          lectureId={lectureId}
           currentPage={currentPage}
           totalPages={totalPages}
           loadError={loadError}
@@ -190,9 +193,13 @@ function ViewerPageInner() {
           />
         </div>
 
-        {/* Bottom section - Q&A Panel with padding */}
+        {/* Bottom section - Q&A Panel with padding (only if backend lecture present) */}
         <div className="px-4 py-4 flex flex-col items-center justify-center">
-          <InlinePromptPanel ref={inlinePromptRef} agent={agent} />
+          {lectureId ? (
+            <InlinePromptPanel ref={inlinePromptRef} agent={agent} />
+          ) : (
+            <div className="text-sm text-gray-600">Backend not connected. Viewing only.</div>
+          )}
         </div>
       </div>
   )

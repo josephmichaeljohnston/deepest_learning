@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PdfCarouselRef } from '@/components/PdfCarousel'
-import { fetchAgentPlan } from './mockApi'
-import { fetchAgentPlanFromBackend } from './backendApi'
+import { fetchStepFromBackend } from './backendApi'
 import type { AgentControllerState, AgentSessionConfig, AgentStep } from './types'
 import { useAudioController } from '@/lib/audio/useAudioController'
 
@@ -15,11 +14,8 @@ export interface AgentControllerApi {
   resume: () => void
   stop: () => void
   skipTo: (index: number) => Promise<void>
-  // User-initiated jump that suppresses auto-advance during transition
   jumpTo: (index: number) => Promise<void>
-  // Simulated progress of current step: 0..1
   progress: number
-  // Post-slide prompt control
   requestPrompt: (message?: string) => void
 }
 
@@ -35,28 +31,20 @@ export function useAgentController(
   })
   const audio = useAudioController()
   const [progress, setProgress] = useState(0)
-  const progressTimer = useRef<number | null>(null)
-  const progressStart = useRef<number>(0)
-  const progressDuration = useRef<number>(0)
-  const progressPausedAt = useRef<number | null>(null)
-  const progressPauseAccum = useRef<number>(0)
-  const pendingNav = useRef<Promise<void> | null>(null)
-  const [ttsActive, setTtsActive] = useState(false)
-  const ttsActiveRef = useRef(false)
   const isAdvancingRef = useRef(false)
-  const ttsTextLenRef = useRef(0)
-  const ttsBoundarySeenRef = useRef(false)
-  const ttsBoundaryFallbackTimerRef = useRef<number | null>(null)
-  const ttsStartRef = useRef<number | null>(null)
-  const estimatedTotalMsRef = useRef<number>(0)
-  const charRateRef = useRef<number>(0)
-  const ttsTextRef = useRef<string>('')
-  const ttsWordStartsRef = useRef<number[]>([])
-  const ttsTotalWordsRef = useRef<number>(0)
   const userSkipRef = useRef(false)
   const postSlidePromptRef = useRef<((msg?: string) => void) | null>(null)
   const nextAfterPromptRef = useRef(false)
   const pendingNextIndexRef = useRef<number | null>(null)
+  const configRef = useRef<AgentSessionConfig>(baseConfig)
+
+  // Update configRef whenever baseConfig changes (e.g., totalPages becomes known)
+  useEffect(() => {
+    configRef.current = baseConfig
+  }, [baseConfig])
+  
+  const loadingNextRef = useRef(false)
+  const pendingNav = useRef<Promise<void> | null>(null)
 
   const navigateTo = useCallback(async (page: number) => {
     const go = async () => {
@@ -75,209 +63,62 @@ export function useAgentController(
     await p
   }, [opts, pdfRef])
 
-  const stopProgress = useCallback(() => {
-    if (progressTimer.current) {
-      cancelAnimationFrame(progressTimer.current)
-      progressTimer.current = null
-    }
-  }, [])
-
-  const tickProgress = useCallback(() => {
-    const now = performance.now()
-    const paused = progressPausedAt.current
-    const pauseAdj = progressPauseAccum.current + (paused ? now - paused : 0)
-    const elapsed = now - progressStart.current - pauseAdj
-    let pct = Math.min(1, elapsed / Math.max(1, progressDuration.current))
-    if (ttsActiveRef.current && pct >= 1) pct = 0.98
-    setProgress(pct)
-    if (pct < 1 || ttsActiveRef.current) {
-      progressTimer.current = requestAnimationFrame(tickProgress)
-    } else {
-      progressTimer.current = null
-    }
-  }, [])
-
-  const startProgress = useCallback((durationMs: number) => {
-    stopProgress()
-    setProgress(0)
-    progressDuration.current = Math.max(1000, durationMs)
-    progressStart.current = performance.now()
-    progressPausedAt.current = null
-    progressPauseAccum.current = 0
-    progressTimer.current = requestAnimationFrame(tickProgress)
-  }, [stopProgress, tickProgress])
-
-  const cancelSpeech = useRef<(() => void) | null>(null)
-
-  const speakText = useCallback((text: string | undefined, fallbackMs?: number) => {
-    // Clear any prior boundary fallback timer
-    if (ttsBoundaryFallbackTimerRef.current) {
-      window.clearTimeout(ttsBoundaryFallbackTimerRef.current)
-      ttsBoundaryFallbackTimerRef.current = null
-    }
-    ttsBoundarySeenRef.current = false
-    ttsTextLenRef.current = text?.length ?? 0
-    ttsTextRef.current = text || ''
-    // Precompute word starts for boundary-to-word mapping
-    ttsWordStartsRef.current = []
-    ttsTotalWordsRef.current = 0
-    if (text) {
-      const regex = /\b\w[\w'\-]*\b/g
-      let m: RegExpExecArray | null
-      while ((m = regex.exec(text)) !== null) {
-        if (typeof m.index === 'number') {
-          ttsWordStartsRef.current.push(m.index)
-        }
-      }
-      ttsTotalWordsRef.current = ttsWordStartsRef.current.length
-    }
-
-    if (!text) {
-      setTtsActive(false)
-      ttsActiveRef.current = false
-      return () => {}
-    }
-    try {
-      const synth = window.speechSynthesis
-      if (!synth) return () => {}
-      if (synth.speaking) synth.cancel()
-      const utter = new SpeechSynthesisUtterance(text)
-      // Keep a consistent rate for predictability
-      utter.rate = 1
-      utter.onstart = () => {
-        setTtsActive(true)
-        ttsActiveRef.current = true
-        // Clear user-initiated skip suppression once the new step starts speaking
-        userSkipRef.current = false
-        ttsStartRef.current = performance.now()
-        charRateRef.current = 0
-        estimatedTotalMsRef.current = fallbackMs || 5000
-        // Always run a tick; if boundaries show up, it will adapt to time-based estimation
-        startProgress(estimatedTotalMsRef.current)
-      }
-      // Use boundary events to reflect real-time progress
-      utter.onboundary = (ev: any) => {
-        ttsBoundarySeenRef.current = true
-        // Stop timer fallback; boundary will drive progress
-        stopProgress()
-        const idx: number = typeof ev?.charIndex === 'number' ? ev.charIndex : 0
-        const starts = ttsWordStartsRef.current
-        const totalWords = Math.max(1, ttsTotalWordsRef.current)
-        // Count words whose start index is <= current char index
-        let low = 0, high = starts.length
-        while (low < high) {
-          const mid = (low + high) >> 1
-          if (starts[mid] <= idx) low = mid + 1
-          else high = mid
-        }
-        const spokenWords = Math.min(low, totalWords)
-        let pctWords = spokenWords / totalWords
-        if (ttsActiveRef.current && pctWords >= 1) pctWords = 0.98
-        setProgress(pctWords)
-      }
-      utter.onend = () => {
-        setTtsActive(false)
-        ttsActiveRef.current = false
-        // Complete progress and stop timer; auto-advance effect will pick this up
-        stopProgress()
-        setProgress(1)
-      }
-      synth.speak(utter)
-
-      // If boundary events aren’t supported, start a fallback progress timer after a short delay
-      if (fallbackMs && fallbackMs > 0) {
-        ttsBoundaryFallbackTimerRef.current = window.setTimeout(() => {
-          if (!ttsBoundarySeenRef.current) {
-            startProgress(fallbackMs)
-          }
-        }, 700)
-      }
-
-      const cancel = () => {
-        try {
-          synth.cancel()
-        } finally {
-          setTtsActive(false)
-          ttsActiveRef.current = false
-          if (ttsBoundaryFallbackTimerRef.current) {
-            window.clearTimeout(ttsBoundaryFallbackTimerRef.current)
-            ttsBoundaryFallbackTimerRef.current = null
-          }
-        }
-      }
-      return cancel
-    } catch {
-      setTtsActive(false)
-      ttsActiveRef.current = false
-      return () => {}
-    }
-  }, [startProgress, stopProgress])
-
   const playStep = useCallback(
     async (step: AgentStep) => {
-      // Ensure fresh progress/tts state for this step to avoid auto-advance races
-      stopProgress()
-      setProgress(0)
-      setTtsActive(false)
-      ttsActiveRef.current = false
       setState((s) => ({ ...s, status: 'navigating' }))
+      console.log('[playStep] Navigating to page:', step.page)
       await navigateTo(step.page)
       setState((s) => ({ ...s, status: 'playing' }))
-      // Prefer TTS-driven progress via boundaries; fallback to a timer if boundaries aren’t supported
-      cancelSpeech.current?.()
-      cancelSpeech.current = speakText(step.ttsText || step.transcript, step.speakMs ?? 5000)
-      // Optionally try audio as a subtle background beep if available
-      // but we no longer rely on audio end to advance
-      audio.play(step.audioUrl).catch(() => {})
+      // Play audio only - no Web Speech API
+      console.log('[playStep] Playing audio from:', step.audioUrl)
+      audio.play(step.audioUrl, step.audioStatusUrl).catch((err) => {
+        console.error('[playStep] Audio playback failed:', err?.message || err)
+      })
     },
-    [audio, navigateTo, speakText, stopProgress]
+    [audio, navigateTo]
   )
 
   const start = useCallback(
     async (cfg?: Partial<AgentSessionConfig>) => {
+      console.log('[agent.start] Called with cfg:', cfg)
+      console.log('[agent.start] baseConfig:', baseConfig)
+      
       // Clean up any prior run to ensure fresh state
       try {
         audio.stop()
       } catch {}
-      cancelSpeech.current?.()
-      stopProgress()
-      setProgress(0)
-      setTtsActive(false)
-      ttsActiveRef.current = false
-      isAdvancingRef.current = false
-      pendingNav.current = null
-
+      
       setState((s) => ({ ...s, status: 'fetching', error: undefined }))
       try {
-  const merged = { ...baseConfig, ...cfg }
-  const plan = merged.lectureId ? await fetchAgentPlanFromBackend(merged as any) : await fetchAgentPlan(merged)
-        if (!plan.steps.length) throw new Error('No steps returned')
-        // Initialize and let playStep handle navigation/progress; we only call it once here
-        setState({ status: 'navigating', currentStepIndex: 0, steps: plan.steps })
-        await playStep(plan.steps[0])
+        const merged = { ...baseConfig, ...cfg }
+        console.log('[agent.start] Merged config:', merged)
+        configRef.current = merged
+        if (!merged.lectureId) {
+          throw new Error('lectureId required to start lecture')
+        }
+        if (!merged.totalPages || merged.totalPages < 1) {
+          throw new Error('totalPages must be known before starting')
+        }
+
+        console.log('[agent.start] Starting lecture:', merged.lectureId, 'Total pages:', merged.totalPages)
+        
+        // Fetch and play the first step
+        const lectureId = typeof merged.lectureId === 'number' ? merged.lectureId : parseInt(String(merged.lectureId))
+        console.log('[agent.start] Calling fetchStepFromBackend with lectureId:', lectureId)
+        const firstStep = await fetchStepFromBackend(lectureId, 1)
+        console.log('[agent.start] First step fetched:', firstStep)
+        setState({ status: 'navigating', currentStepIndex: 0, steps: [firstStep] })
+        await playStep(firstStep)
       } catch (e: any) {
+        console.error('[agent.start] Error:', e?.message || e)
         setState((s) => ({ ...s, status: 'error', error: e?.message || 'Unknown error' }))
       }
     },
-    [audio, baseConfig, playStep, stopProgress]
+    [audio, baseConfig, playStep]
   )
 
   const pause = useCallback(() => {
     audio.pause()
-    try {
-      const synth = window.speechSynthesis
-      if (synth && synth.speaking && !synth.paused) synth.pause()
-    } catch {}
-    // Pause fallback timer progress if running
-    if (!ttsBoundarySeenRef.current) {
-      if (progressPausedAt.current == null) {
-        progressPausedAt.current = performance.now()
-      }
-      if (progressTimer.current) {
-        cancelAnimationFrame(progressTimer.current)
-        progressTimer.current = null
-      }
-    }
     setState((s) => ({ ...s, status: 'paused' }))
   }, [audio])
 
@@ -285,105 +126,117 @@ export function useAgentController(
     async (index: number) => {
       const steps = state.steps
       if (index < 0 || index >= steps.length) return
-      // Stop audio and speech and reset progress before switching
       audio.stop()
-      cancelSpeech.current?.()
-      stopProgress()
-      setProgress(0)
       setState((s) => ({ ...s, currentStepIndex: index }))
       await playStep(steps[index])
     },
-    [audio, playStep, state.steps, stopProgress]
+    [audio, playStep, state.steps]
   )
 
   const resume = useCallback(() => {
     audio.resume()
-    try {
-      const synth = window.speechSynthesis
-      if (synth && synth.paused) synth.resume()
-    } catch {}
-    // Resume fallback timer progress if boundary not available
-    if (!ttsBoundarySeenRef.current) {
-      if (progressPausedAt.current != null) {
-        progressPauseAccum.current += performance.now() - progressPausedAt.current
-        progressPausedAt.current = null
-      }
-      if (!progressTimer.current && progress < 1) {
-        progressTimer.current = requestAnimationFrame(tickProgress)
-      }
-    }
     // If a post-slide prompt was shown, continue to the next step
     if (nextAfterPromptRef.current && pendingNextIndexRef.current != null) {
       const idx = pendingNextIndexRef.current
       nextAfterPromptRef.current = false
       pendingNextIndexRef.current = null
-      // Switch to next step
       skipTo(idx)
       return
     }
     setState((s) => ({ ...s, status: 'playing' }))
-  }, [audio, progress, tickProgress, skipTo])
+  }, [audio, skipTo])
 
   const stop = useCallback(() => {
     audio.stop()
-    stopProgress()
-    setProgress(0)
-    cancelSpeech.current?.()
     setState({ status: 'stopped', currentStepIndex: -1, steps: [] })
-  }, [audio, stopProgress])
+  }, [audio])
 
-  // Public user-initiated jump: prevent auto-advance from chaining over the user’s selection
   const jumpTo = useCallback(async (index: number) => {
     userSkipRef.current = true
     await skipTo(index)
   }, [skipTo])
 
-  // Auto-advance when progress completes AND TTS (if any) has ended.
+  // Monitor audio playback to drive progress and auto-advance
   useEffect(() => {
-    console.log('[AutoAdvance] Checking conditions:', {
-      status: state.status,
-      progress,
-      ttsActive,
-      userSkip: userSkipRef.current,
-      isAdvancing: isAdvancingRef.current,
-    })
-    if (state.status !== 'playing' || progress < 1 || ttsActive) return
-    // If user just jumped, do not auto-advance from the old step completion
-    if (userSkipRef.current) return
-    if (isAdvancingRef.current) return
-    isAdvancingRef.current = true
-    console.log('[AutoAdvance] TRIGGERING - Progress complete and TTS ended')
-    ;(async () => {
-      // After each slide narration finishes, pause and prompt the user
-      console.log('[AutoAdvance] Pausing agent...')
-      try { pause() } catch (e) { console.error('[AutoAdvance] Pause error:', e) }
-      console.log('[AutoAdvance] Calling postSlidePromptRef.current?.("Do you understand?")')
-      console.log('[AutoAdvance] postSlidePromptRef.current exists:', !!postSlidePromptRef.current)
-      try {
-        postSlidePromptRef.current?.('Do you understand?')
-      } catch (e) { console.error('[AutoAdvance] Prompt callback error:', e) }
-      const next = state.currentStepIndex + 1
-      console.log('[AutoAdvance] Next index:', next, 'Total steps:', state.steps.length)
-      if (next < state.steps.length) {
-        nextAfterPromptRef.current = true
-        pendingNextIndexRef.current = next
-      } else {
-        // End of plan: behave like Stop for a fresh-ready state
-        stop()
-      }
-    })().finally(() => {
-      isAdvancingRef.current = false
-    })
-  }, [progress, ttsActive, state.status, state.currentStepIndex, state.steps.length, pause, stop])
-
-  // Hook up external prompt handler from opts
-  useEffect(() => {
-    console.log('[useAgentController] Setting up postSlidePromptRef with onPrompt callback:', !!opts?.onPrompt)
-    postSlidePromptRef.current = opts?.onPrompt ?? null
-    return () => { 
-      console.log('[useAgentController] Cleaning up postSlidePromptRef')
-      postSlidePromptRef.current = null 
+    if (state.status !== 'playing') {
+      setProgress(0)
+      return
     }
+
+    const updateProgress = () => {
+      const duration = audio.duration
+      const currentTime = audio.currentTime
+      
+      if (duration > 0) {
+        const pct = Math.min(1, currentTime / duration)
+        setProgress(pct)
+
+        // Auto-advance when audio finishes
+        if (pct >= 1 && audio.status === 'idle') {
+          if (userSkipRef.current) {
+            userSkipRef.current = false
+            return
+          }
+          if (isAdvancingRef.current) return
+          
+          isAdvancingRef.current = true
+          console.log('[AudioMonitor] Audio finished, showing prompt')
+          
+          ;(async () => {
+            // Pause and show question
+            try { pause() } catch (e) { console.error('[AudioMonitor] Pause error:', e) }
+            try {
+              postSlidePromptRef.current?.('Do you understand?')
+            } catch (e) { console.error('[AudioMonitor] Prompt callback error:', e) }
+            
+            // Load next page if available
+            const currentPage = state.steps[state.currentStepIndex]?.page ?? 1
+            const nextPage = currentPage + 1
+            const { totalPages } = configRef.current
+            
+            console.log('[AudioMonitor] Current page:', currentPage, 'Next page:', nextPage, 'Total pages:', totalPages)
+            
+            if (nextPage <= totalPages) {
+              try {
+                loadingNextRef.current = true
+                const lectureId = configRef.current.lectureId
+                if (!lectureId) throw new Error('lectureId required')
+                console.log('[AudioMonitor] Loading next step for page:', nextPage)
+                const nextStep = await fetchStepFromBackend(
+                  typeof lectureId === 'number' ? lectureId : parseInt(String(lectureId)),
+                  nextPage
+                )
+                setState((s) => ({
+                  ...s,
+                  steps: [...s.steps, nextStep],
+                }))
+                const nextIndex = state.currentStepIndex + 1
+                nextAfterPromptRef.current = true
+                pendingNextIndexRef.current = nextIndex
+              } catch (e) {
+                console.error('[AudioMonitor] Failed to load next step:', e)
+                stop()
+              } finally {
+                loadingNextRef.current = false
+              }
+            } else {
+              console.log('[AudioMonitor] Reached end of document')
+              stop()
+            }
+          })().finally(() => {
+            isAdvancingRef.current = false
+          })
+        }
+      }
+    }
+
+    const interval = setInterval(updateProgress, 100)
+    return () => clearInterval(interval)
+  }, [state.status, state.currentStepIndex, state.steps, audio.duration, audio.currentTime, audio.status, pause, stop])
+
+  // Hook up external prompt handler
+  useEffect(() => {
+    postSlidePromptRef.current = opts?.onPrompt ?? null
   }, [opts?.onPrompt])
 
   const currentStep = useMemo(() => {

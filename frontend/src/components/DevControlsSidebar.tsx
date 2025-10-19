@@ -8,6 +8,7 @@ import { onApiLog, getApiLogs } from '@/lib/dev/apiLog'
 interface DevControlsSidebarProps {
   agent: AgentControllerApi
   ready: boolean
+  lectureId?: string | null
   currentPage: number
   totalPages: number
   loadError: string | null
@@ -21,6 +22,7 @@ interface DevControlsSidebarProps {
 export default function DevControlsSidebar({
   agent,
   ready,
+  lectureId,
   currentPage,
   totalPages,
   loadError,
@@ -203,7 +205,10 @@ export default function DevControlsSidebar({
               Agent Controls
             </h3>
             <div className="space-y-2">
-              <AgentControlPanel agent={agent} ready={ready} />
+              <AgentControlPanel agent={agent} ready={!!lectureId && ready} />
+              {!lectureId && (
+                <div className="text-xs text-gray-500">Backend not connected — agent disabled.</div>
+              )}
             </div>
           </div>
         </div>

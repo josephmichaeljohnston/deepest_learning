@@ -39,6 +39,10 @@ uploads/*
 !uploads/README.md
 !uploads/.gitkeep
 
+# Backend audio outputs (runtime artifacts)
+backend/speech_outputs/*
+backend/uploads/*
+
 # Frontend uploaded files (runtime artifacts)
 frontend/uploads/*
 !frontend/next-env.d.ts

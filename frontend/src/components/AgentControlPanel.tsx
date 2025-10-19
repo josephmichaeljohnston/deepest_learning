@@ -10,20 +10,21 @@ interface Props {
 
 export default function AgentControlPanel({ agent, ready = true }: Props) {
   const { state, currentStep, progress } = agent
+  const hasLecture = Boolean((agent as any)?.state?.steps) // not reliable; we'll gate by status + ready; final guard on start throws if missing in controller
   const disableStart = !ready || state.status === 'playing' || state.status === 'navigating' || state.status === 'fetching'
   const canPause = state.status === 'playing'
   const canResume = state.status === 'paused'
 
   return (
     <div className="border-t pt-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Agentic Controls (Simulated API)</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Agent Controls</h3>
       <div className="flex flex-wrap gap-3">
         <button
           onClick={() => agent.start()}
           disabled={disableStart}
           className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
         >
-          {state.status === 'fetching' ? 'Fetching Plan…' : 'Start Agent'}
+          {state.status === 'fetching' ? 'Starting…' : 'Start Agent'}
         </button>
 
         <button
