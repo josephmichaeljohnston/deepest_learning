@@ -266,3 +266,95 @@ class UserQuestionResource(Resource):
             "answer": result["answer"],
             "hypothesis": hypothesis,
         }
+
+
+import io
+import numpy as np
+import soundfile as sf
+from flask import Response
+import re
+
+
+def _split_into_sentences_for_streaming(text: str):
+    """Split text into sentences for streaming."""
+    text = text.strip()
+    if not text:
+        return []
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    return [s.strip() for s in sentences if s.strip()]
+
+
+def generate_audio_stream(script: str, voice: str = "af_heart"):
+    """
+    Generator that yields WAV audio chunks as they're synthesized.
+
+    Args:
+        script: The text to synthesize
+        voice: The voice to use for synthesis
+
+    Yields:
+        Audio data chunks in WAV format
+    """
+    from .ai_utils import pipeline
+
+    sentences = _split_into_sentences_for_streaming(script)
+
+    # WAV header will be written first, then we append audio data
+    # We'll use a streaming approach where we yield chunks
+    is_first_chunk = True
+    sample_rate = 24000
+
+    for sentence in sentences:
+        generator = pipeline(sentence, voice=voice)
+
+        for i, (gs, ps, audio) in enumerate(generator):
+            audio_array = np.asarray(audio, dtype=np.float32)
+
+            # Convert numpy array to WAV bytes
+            buffer = io.BytesIO()
+            sf.write(buffer, audio_array, sample_rate, format="WAV")
+            buffer.seek(0)
+            wav_bytes = buffer.read()
+
+            if is_first_chunk:
+                # First chunk includes the WAV header
+                yield wav_bytes
+                is_first_chunk = False
+            else:
+                # Subsequent chunks: skip the 44-byte WAV header
+                yield wav_bytes[44:]
+
+
+@ns.route("/audio-stream/<int:lecture_id>/<int:slide_num>")
+class AudioStreamResource(Resource):
+    def get(self, lecture_id, slide_num):
+        """Stream audio as it's being generated in real-time"""
+        db_gen = get_db()
+        db = next(db_gen)
+        try:
+            slide = (
+                db.query(Slide)
+                .filter_by(lecture_id=lecture_id, slide_number=slide_num)
+                .first()
+            )
+            if not slide:
+                api.abort(404, "slide not found")
+
+            if not slide.script:
+                api.abort(404, "no script available for this slide")
+
+            return Response(
+                generate_audio_stream(slide.script),
+                mimetype="audio/wav",
+                headers={
+                    "Content-Disposition": "inline",
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                    "Transfer-Encoding": "chunked",
+                },
+            )
+        finally:
+            try:
+                next(db_gen)
+            except StopIteration:
+                pass
