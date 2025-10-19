@@ -37,7 +37,19 @@ step_response = api.model(
 answer_request = api.model("AnswerRequest", {"answer": fields.String(required=True)})
 answer_response = api.model(
     "AnswerResponse",
-    {"id": fields.Integer(), "slide": fields.Integer(), "answer": fields.String()},
+    {
+        "feedback": fields.String(),
+        "correct": fields.String(),
+        "hypothesis": fields.String(),
+    },
+)
+
+question_request = api.model(
+    "QuestionRequest", {"question": fields.String(required=True)}
+)
+question_response = api.model(
+    "QuestionResponse",
+    {"answer": fields.String(), "hypothesis": fields.String()},
 )
 
 UPLOAD_FOLDER = "uploads"  # Directory to store uploaded PDFs
