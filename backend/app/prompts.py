@@ -114,7 +114,7 @@ def answer_feedback_prompt(question: str, answer: str, hypothesis: str) -> str:
     """
     return f"""
 Analyse the correctness of the following student's answer to a question, and provide a brief summary addressed to them on what they did well and what they could improve on.
-Also analyse how the student answers the question - does this change our hypothesis of the student's understanding of the topic? Provide the updated hypothesis. do not refer in anyway to the meta understanding of the hypothesis. please ensure that you do not focus too much on the most recent response it should only impact the hypothesis in a small way.
+Also analyse how the student answers the question - does this change our hypothesis of the student's understanding of the topic? Provide the updated hypothesis. Do not refer in anyway to the meta understanding of the hypothesis. Please ensure that you do not focus too much on the most recent response, it should only impact the hypothesis in a small way.
 
 <question>
 {question}
@@ -127,4 +127,36 @@ Also analyse how the student answers the question - does this change our hypothe
 <hypothesis>
 {hypothesis}
 </hypothesis>
+"""
+
+
+def user_question_prompt(script: str, question: str, hypothesis: str) -> str:
+    """
+    Generate a prompt for a university lecturer to ask a question to the user.
+
+    Args:
+        script: The script of the lecture so far.
+        question: The question that was asked.
+        hypothesis: The hypothesis of the student's understanding of the topic.
+
+    Returns:
+        A prompt for a university lecturer to ask a question to the user.
+    """
+    return f"""
+Below, we have a lecture that is being delivered to a student and a question they're asking about the lecture.
+
+<lecture>
+{script}
+</lecture>
+
+<question>
+{question}
+</question>
+
+<student hypothesis>
+{hypothesis}
+</student hypothesis>
+
+Give the user an answer to the question.
+Also analyse the question the student is asking - does this change our hypothesis of the student's understanding of the topic? Provide the updated hypothesis. Do not refer in anyway to the meta understanding of the hypothesis. Please ensure that you do not focus too much on the most recent response, it should only impact the hypothesis in a small way.
 """
