@@ -134,11 +134,11 @@ class StepResource(Resource):
             db.commit()
             db.refresh(lecture)
 
-            audio_filename = slide_to_speech(slide)
-            slide.audio_path = audio_filename
-            db.add(slide)
-            db.commit()
-            db.refresh(slide)
+            # audio_filename = slide_to_speech(slide)
+            # slide.audio_path = audio_filename
+            # db.add(slide)
+            # db.commit()
+            # db.refresh(slide)
 
             return {
                 "id": slide.id,
