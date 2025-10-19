@@ -37,6 +37,7 @@ step_response = api.model(
         "text": fields.String(),
         "question": fields.String(),
         "hypothesis_use": fields.String(),
+        "hypothesis": fields.String(),
     },
 )
 
@@ -145,6 +146,7 @@ class StepResource(Resource):
                 "text": slide.script,
                 "question": result["question"],
                 "hypothesis_use": result["hypothesis_use"],
+                "hypothesis": lecture.lecture_hypothesis,
             }
         finally:
             try:
