@@ -6,7 +6,7 @@ from .models import Lecture, Slide
 import os
 import mimetypes
 from werkzeug.utils import secure_filename
-from .ai_utils import slide_to_speech, get_answer_feedback
+from .ai_utils import slide_to_speech, get_answer_feedback, user_ask_question
 
 api = Api(
     title="Deepest Learning API",
@@ -110,7 +110,7 @@ class StepResource(Resource):
             db.refresh(slide)
 
             return {
-                "id": lecture_id,
+                "id": slide.id,
                 "slide": slide_num,
                 "text": slide.script,
                 "question": result["question"],
@@ -149,8 +149,12 @@ class AnswerResource(Resource):
         feedback = result["feedback"]
         correct = result["correct"]
         hypothesis = result["hypothesis"]
+
+        lecture.lecture_hypothesis = hypothesis
+        db.add(lecture)
+        db.commit()
+        db.refresh(lecture)
         return {
-            "id": lecture_id,
             "feedback": feedback,
             "correct": correct,
             "hypothesis": hypothesis,
@@ -198,15 +202,13 @@ class AudioResource(Resource):
                 pass
 
 
-ns.route("/user-question/<int:lecture_id>/<int:slide_num>")
-
-
+@ns.route("/user-question/<int:lecture_id>/<int:slide_num>")
 class UserQuestionResource(Resource):
     @api.expect(answer_request)
     @api.response(200, "OK", answer_response)
     def post(self, lecture_id, slide_num):
         payload = request.get_json() or {}
-        question = payload.get("answer")
+        question = payload.get("question")
         if not question:
             api.abort(400, "question required")
         db_gen = get_db()
@@ -223,13 +225,13 @@ class UserQuestionResource(Resource):
         if not slide:
             api.abort(404, "slide not found")
 
-        result = get_answer_feedback(
-            question, "", lecture.lecture_hypothesis, is_user_question=True
-        )
-        feedback = result["feedback"]
+        result = user_ask_question(slide.script, question, lecture.lecture_hypothesis)
         hypothesis = result["hypothesis"]
+        lecture.lecture_hypothesis = hypothesis
+        db.add(lecture)
+        db.commit()
+        db.refresh(lecture)
         return {
-            "id": lecture_id,
-            "feedback": feedback,
+            "answer": result["answer"],
             "hypothesis": hypothesis,
         }
