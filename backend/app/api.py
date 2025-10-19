@@ -3,11 +3,10 @@ from flask import request, send_file
 from .ai_utils import lecture_step
 from .db import get_db
 from .models import Lecture, Slide
-from .handlers import process_step, answer_question
 import os
 import mimetypes
 from werkzeug.utils import secure_filename
-from .ai_utils import slide_to_speech
+from .ai_utils import slide_to_speech, get_answer_feedback
 
 api = Api(
     title="Deepest Learning API",
@@ -35,7 +34,7 @@ step_response = api.model(
     {"id": fields.Integer(), "slide": fields.Integer(), "text": fields.String()},
 )
 
-answer_request = api.model("AnswerRequest", {"question": fields.String(required=True)})
+answer_request = api.model("AnswerRequest", {"answer": fields.String(required=True)})
 answer_response = api.model(
     "AnswerResponse",
     {"id": fields.Integer(), "slide": fields.Integer(), "answer": fields.String()},
@@ -63,7 +62,11 @@ class InstantiateLecture(Resource):
         db_gen = get_db()
         db = next(db_gen)
         try:
-            lecture = Lecture(title=filename, pdf_path=file_path)
+            lecture = Lecture(
+                title=filename,
+                pdf_path=file_path,
+                lecture_hypothesis="We have no knowledge of the user's understanding",
+            )
             db.add(lecture)
             db.commit()
             db.refresh(lecture)
@@ -87,19 +90,14 @@ class StepResource(Resource):
             if not lecture:
                 api.abort(404, "lecture not found")
 
-            slide_text = lecture_step(lecture, slide_num)
-
-            # if this slide number already exists for this lecture, overwrite it
-            slide = db.query(Slide).filter_by(lecture_id=lecture_id, slide_number=slide_num).first()
-            if slide:
-                slide.script = slide_text
-                db.add(slide)
-                db.commit()
-                db.refresh(slide)
-            else:
-                slide = Slide(
-                    script=slide_text, slide_number=slide_num, lecture_id=lecture_id
-                )
+            result = lecture_step(lecture, slide_num)
+            slide = Slide(
+                id=slide_num,
+                script=result["script"],
+                slide_number=slide_num,
+                lecture_id=lecture_id,
+                question=result["question"],
+            )
             db.add(slide)
             db.add(lecture)
             db.commit()
@@ -115,6 +113,7 @@ class StepResource(Resource):
                 "id": lecture_id,
                 "slide": slide_num,
                 "text": slide.script,
+                "question": result["question"],
             }
         finally:
             try:
@@ -129,13 +128,32 @@ class AnswerResource(Resource):
     @api.response(200, "OK", answer_response)
     def post(self, lecture_id, slide_num):
         payload = request.get_json() or {}
-        question = payload.get("question")
-        if not question:
-            api.abort(400, "question required")
+        answer = payload.get("answer")
+        if not answer:
+            api.abort(400, "answer required")
+        db_gen = get_db()
+        db = next(db_gen)
+        lecture = db.query(Lecture).filter_by(id=lecture_id).first()
+        if not lecture:
+            api.abort(404, "lecture not found")
+
+        slide = (
+            db.query(Slide)
+            .filter_by(lecture_id=lecture_id, slide_number=slide_num)
+            .first()
+        )
+        if not slide:
+            api.abort(404, "slide not found")
+
+        result = get_answer_feedback(slide.question, answer, lecture.lecture_hypothesis)
+        feedback = result["feedback"]
+        correct = result["correct"]
+        hypothesis = result["hypothesis"]
         return {
             "id": lecture_id,
-            "slide": slide_num,
-            "answer": answer_question(lecture_id, slide_num, question),
+            "feedback": feedback,
+            "correct": correct,
+            "hypothesis": hypothesis,
         }
 
 

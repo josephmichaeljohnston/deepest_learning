@@ -9,8 +9,7 @@ def lecture_intro_prompt(student_hypothesis: str, lecture_hypothesis: str) -> st
     Returns:
         A prompt for a university lecturer to give an introduction to a lecture.
     """
-    return (
-f"""
+    return f"""
 You're a university lecturer whose giving a lecture to a student with this being the introductory slide.
 
 We're also keeping track of some extra information, to help you tailor you're lecture style. Do not mention any of this context in your response.
@@ -26,11 +25,13 @@ We're also keeping track of some extra information, to help you tailor you're le
 </understanding context>
 
 Attached is the first slide of your pdf presentation. Write a brief friendly introduction to the lecture. Make sure your keep your lecture conversational and engaging (avoid bullet points and lists where possible). Do not end your lecturing over this slide with a question or summary line.
+Also, if there is an appropriate technical question to ask, set ask_question to True and provide the question in the question field. Otherwise, set ask_question to False and leave the question field as an empty string.
 """
-    )
 
 
-def lecture_step_prompt(lecture: str, student_hypothesis: str, lecture_hypothesis: str) -> str:
+def lecture_step_prompt(
+    lecture: str, student_hypothesis: str, lecture_hypothesis: str
+) -> str:
     """
     Generate a prompt for a university lecturer to continue a lecture for the next slide.
 
@@ -42,8 +43,7 @@ def lecture_step_prompt(lecture: str, student_hypothesis: str, lecture_hypothesi
     Returns:
         A prompt for a university lecturer to continue a lecture for the next slide.
     """
-    return (
-f"""
+    return f"""
 You're a university lecturer whose given a lecture this point:
 <lecture>
 {lecture}
@@ -62,11 +62,13 @@ We're also keeping track of some extra information, to help you tailor you're le
 </understanding context>
 
 Attached is the next slide of your pdf presentation. Please continue your lecture from the exact point you left off to cover the content in this slide. Make sure your keep your lecture conversational and engaging (avoid bullet points and lists where possible). Do not end your lecturing over this slide with a question or summary line.
+Also, if there is an appropriate technical question to ask, set ask_question to True and provide the question in the question field. Otherwise, set ask_question to False and leave the question field as an empty string.
 """
-    )
 
 
-def question_prompt(lecture: str, student_hypothesis: str, lecture_hypothesis: str) -> str:
+def question_prompt(
+    lecture: str, student_hypothesis: str, lecture_hypothesis: str
+) -> str:
     """
     Generate a prompt for a university lecturer to ask a question about the content of a lecture.
 
@@ -78,8 +80,7 @@ def question_prompt(lecture: str, student_hypothesis: str, lecture_hypothesis: s
     Returns:
         A prompt for a university lecturer to ask a question about the content of a lecture.
     """
-    return (
-f"""
+    return f"""
 Below, we have a lecture that is being delivered to a student and a hypothesis of what we believe we know about the student.
 
 <lecture>
@@ -96,10 +97,9 @@ Below, we have a lecture that is being delivered to a student and a hypothesis o
 
 Ask the student a question about the content discussed in the later parts of the lecture that will help provide insight into their level of understanding. Make the question have a short written response. Only ask the question, nothing else.
 """
-    )
 
 
-def answer_feedback_prompt(question: str, answer: str) -> str:
+def answer_feedback_prompt(question: str, answer: str, hypothesis: str) -> str:
     """
     Generate a prompt for a university lecturer to provide feedback on a student's answer to a question.
     NOTE: This prompt expects the use of structured outputs.
@@ -107,13 +107,14 @@ def answer_feedback_prompt(question: str, answer: str) -> str:
     Args:
         question: The question that was asked.
         answer: The student's answer to the question.
+        hypothesis: The hypothesis of the student's understanding of the topic.
 
     Returns:
         A prompt for a university lecturer to provide feedback on a student's answer to a question.
     """
-    return (
-f"""
+    return f"""
 Analyse the correctness of the following student's answer to a question, and provide a brief summary addressed to them on what they did well and what they could improve on.
+Also analyse how the student answers the question - does this change our hypothesis of the student's understanding of the topic? Provide the updated hypothesis. do not refer in anyway to the meta understanding of the hypothesis. please ensure that you do not focus too much on the most recent response it should only impact the hypothesis in a small way.
 
 <question>
 {question}
@@ -122,5 +123,8 @@ Analyse the correctness of the following student's answer to a question, and pro
 <answer>
 {answer}
 </answer>
+
+<hypothesis>
+{hypothesis}
+</hypothesis>
 """
-    )
