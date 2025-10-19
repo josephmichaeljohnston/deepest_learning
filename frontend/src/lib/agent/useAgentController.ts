@@ -74,7 +74,8 @@ export function useAgentController(
       setState((s) => ({ ...s, status: 'navigating' }))
       console.log('[playStep] Navigating to page:', step.page)
       await navigateTo(step.page)
-      // Play audio only - no Web Speech API
+      
+      // Audio URLs are already available from the step fetch, safe to play
       const url = step.audioStreamUrl || step.audioUrl
       console.log('[playStep] Playing audio from:', url, step.audioStreamUrl ? '(stream)' : '(file)')
       try {
@@ -118,6 +119,7 @@ export function useAgentController(
         console.log('[agent.start] Calling fetchStepFromBackend with lectureId:', lectureId)
         const firstStep = await fetchStepFromBackend(lectureId, 1)
         console.log('[agent.start] First step fetched:', firstStep)
+        // Step is now complete, safe to update state and play
         setState({ status: 'navigating', currentStepIndex: 0, steps: [firstStep], isStarting: true })
         await playStep(firstStep)
         // playStep only resolves after audio.play() has started; clear starting flag
