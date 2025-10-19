@@ -14,6 +14,7 @@ from .prompts import (
     user_question_prompt,
 )
 from .utils import load_slide_as_named_tempfile
+from typing import Iterator
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 pipeline = KPipeline(lang_code="a")
@@ -202,3 +203,22 @@ def user_ask_question(script: str, question: str, hypothesis: str) -> dict:
     )
     parsed_response = response.output_parsed
     return {"answer": parsed_response.answer, "hypothesis": parsed_response.hypothesis}
+
+
+def iter_tts_pcm_chunks(slide: Slide) -> Iterator[bytes]:
+    """
+    Stream TTS audio for a slide as raw 32-bit float PCM chunks at 24 kHz (mono).
+
+    Yields binary chunks (little-endian float32) suitable for custom streaming
+    playback via Web Audio API.
+
+    Args:
+        slide: The slide whose script should be spoken.
+    """
+    sentences = _split_into_sentences(slide.script or "")
+    for sentence in sentences:
+        generator = pipeline(sentence, voice="af_heart")
+        for _i, (_gs, _ps, audio) in enumerate(generator):
+            # convert to contiguous float32 le bytes
+            chunk = np.asarray(audio, dtype=np.float32)
+            yield chunk.tobytes()

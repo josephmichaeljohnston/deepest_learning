@@ -1,12 +1,19 @@
 from flask_restx import Api, Namespace, Resource, fields
-from flask import request, send_file
+from flask import request, send_file, Response, stream_with_context
 from .ai_utils import lecture_step
 from .db import get_db
 from .models import Lecture, Slide
 import os
 import mimetypes
 from werkzeug.utils import secure_filename
-from .ai_utils import slide_to_speech, get_answer_feedback, user_ask_question
+from .ai_utils import (
+    slide_to_speech,
+    get_answer_feedback,
+    user_ask_question,
+    iter_tts_pcm_chunks,
+)
+import numpy as np
+import soundfile as sf
 
 api = Api(
     title="Deepest Learning API",
@@ -133,12 +140,6 @@ class StepResource(Resource):
             db.commit()
             db.refresh(lecture)
 
-            audio_filename = slide_to_speech(slide)
-            slide.audio_path = audio_filename
-            db.add(slide)
-            db.commit()
-            db.refresh(slide)
-
             return {
                 "id": slide.id,
                 "slide": slide_num,
@@ -206,19 +207,80 @@ class AudioResource(Resource):
             if not slide:
                 api.abort(404, "slide not found")
 
-            audio_path = slide.audio_path
-            if not audio_path:
-                api.abort(404, "audio not available for this slide")
+            # resolve relative path helper
+            backend_root = os.path.dirname(os.path.dirname(__file__))
 
-            # resolve relative paths against backend root
-            if os.path.isabs(audio_path):
-                resolved_path = audio_path
-            else:
-                backend_root = os.path.dirname(os.path.dirname(__file__))
-                resolved_path = os.path.join(backend_root, audio_path)
+            def _resolve_path(path: str) -> str:
+                return path if os.path.isabs(path) else os.path.join(backend_root, path)
+
+            # optional streaming mode
+            stream = request.args.get("stream", "0").lower() in {"1", "true", "yes"}
+
+            if stream:
+                # prepare output file path and persist reference
+                output_dir = os.path.join(backend_root, "speech_outputs")
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(
+                    output_dir, f"{slide.slide_number}-{slide.lecture_id}.wav"
+                )
+                rel_path = os.path.relpath(output_path, backend_root)
+                if slide.audio_path != rel_path:
+                    slide.audio_path = rel_path
+                    db.add(slide)
+                    db.commit()
+                    db.refresh(slide)
+
+                # open a wav file writer so the final audio is also persisted
+                sf_file = sf.SoundFile(
+                    output_path,
+                    mode="w",
+                    samplerate=24000,
+                    channels=1,
+                    subtype="FLOAT",
+                )
+
+                def generate():
+                    try:
+                        for chunk in iter_tts_pcm_chunks(slide):
+                            # write to disk incrementally
+                            frames = np.frombuffer(chunk, dtype=np.float32)
+                            if len(frames) > 0:
+                                sf_file.write(frames)
+                            # stream to client
+                            yield chunk
+                    finally:
+                        try:
+                            sf_file.close()
+                        except Exception:
+                            pass
+
+                headers = {
+                    "Content-Type": "application/octet-stream",
+                    # custom format hint for clients using Web Audio API
+                    "X-Audio-Format": "f32le; rate=24000; channels=1",
+                    "Cache-Control": "no-store",
+                }
+                return Response(stream_with_context(generate()), headers=headers)
+
+            resolved_path = None
+
+            # if audio already exists and file is present, serve it
+            if slide.audio_path:
+                candidate_path = _resolve_path(slide.audio_path)
+                if os.path.isfile(candidate_path):
+                    resolved_path = candidate_path
+
+            # otherwise, synthesize now and persist path
+            if not resolved_path:
+                audio_filename = slide_to_speech(slide)
+                slide.audio_path = audio_filename
+                db.add(slide)
+                db.commit()
+                db.refresh(slide)
+                resolved_path = _resolve_path(audio_filename)
 
             if not os.path.isfile(resolved_path):
-                api.abort(404, "audio file not found")
+                api.abort(500, "audio generation failed")
 
             mime_type, _ = mimetypes.guess_type(resolved_path)
             return send_file(
