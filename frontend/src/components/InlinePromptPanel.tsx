@@ -123,7 +123,10 @@ const InlinePromptPanel = forwardRef<InlinePromptPanelHandle, Props>(function In
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ question: value }),
         })
-        if (!res.ok) throw new Error('Failed to submit question')
+        if (!res.ok) {
+          const t = await res.text().catch(() => '')
+          throw new Error(t || 'Failed to submit question')
+        }
         const data = await res.json()
         if (!data?.answer) throw new Error('No answer returned from backend')
         setResponse(data.answer)

@@ -32,9 +32,12 @@ export default function UploadPage() {
       if (response.ok) {
         setMessage(`File uploaded successfully! Creating lecture...`)
         // Upload to backend
+        // Use a fresh FormData to avoid any potential body reuse issues
+        const backendForm = new FormData()
+        backendForm.append('file', fileToUpload)
         const backendRes = await fetch('/api/backend/lectures/instantiate-lecture', {
           method: 'POST',
-          body: formData,
+          body: backendForm,
         })
         if (!backendRes.ok) {
           setMessage('Backend connection failed. Please ensure backend is running.')
