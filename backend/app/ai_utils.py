@@ -7,7 +7,12 @@ import re
 import numpy as np
 
 from .models import Lecture, Slide
-from .prompts import answer_feedback_prompt, lecture_intro_prompt, lecture_step_prompt
+from .prompts import (
+    answer_feedback_prompt,
+    lecture_intro_prompt,
+    lecture_step_prompt,
+    user_question_prompt,
+)
 from .utils import load_slide_as_named_tempfile
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -17,6 +22,11 @@ pipeline = KPipeline(lang_code="a")
 class AnswerFeedback(BaseModel):
     correct: bool
     summary: str
+    hypothesis: str
+
+
+class UserQuestionResponse(BaseModel):
+    answer: str
     hypothesis: str
 
 
@@ -170,6 +180,23 @@ def slide_to_speech(slide: Slide):
     return os.path.relpath(output_path, backend_root)
 
 
-def user_ask_question(script, question, hypothesis):
+def user_ask_question(script: str, question: str, hypothesis: str) -> dict:
+    """
+    Answer a question asked by the user and update the hypothesis of the student's understanding of the topic.
 
-    return {"answer": None, "hypothesis": None}
+    Args:
+        script: The script of the lecture so far.
+        question: The question that was asked.
+        hypothesis: The hypothesis of the student's understanding of the topic.
+
+    Returns:
+        A dictionary containing the answer and the updated hypothesis.
+    """
+    prompt = user_question_prompt(script, question, hypothesis)
+    response = client.responses.parse(
+        model="gpt-5-mini",
+        input=prompt,
+        text_format=UserQuestionResponse,
+    )
+    parsed_response = response.output_parsed
+    return {"answer": parsed_response.answer, "hypothesis": parsed_response.hypothesis}
