@@ -13,40 +13,35 @@ export interface AudioController {
   stop: () => void
 }
 
-// Helper function to poll for audio readiness
-async function waitForAudioReady(statusUrl: string, maxWaitMs: number = 30000): Promise<boolean> {
-  const pollIntervalMs = 200
+// Helper: Poll the audio URL itself until it's available (no status route needed)
+async function waitForAudioAvailable(audioUrl: string, maxWaitMs: number = 120000): Promise<void> {
+  const pollIntervalMs = 500
   const startTime = Date.now()
 
-  while (Date.now() - startTime < maxWaitMs) {
+  while (true) {
+    // Optional timeout: if you truly want to wait indefinitely, remove this block
+    if (Date.now() - startTime > maxWaitMs) {
+      throw new Error(`Audio not ready after ${Math.round(maxWaitMs / 1000)}s`)
+    }
+
     try {
-      const res = await fetch(statusUrl)
-      if (!res.ok) {
-        console.warn('[waitForAudioReady] Status check returned:', res.status)
-        await new Promise((r) => setTimeout(r, pollIntervalMs))
-        continue
+      // Request only the first byte to keep the response tiny when available
+      const res = await fetch(audioUrl, {
+        method: 'GET',
+        headers: { Range: 'bytes=0-0' },
+      })
+
+      if (res.ok || res.status === 206) {
+        return
       }
 
-      const data = await res.json()
-      console.log('[waitForAudioReady] Audio status:', data.status, 'ready:', data.ready)
-
-      if (data.ready === true) {
-        return true
-      }
-
-      if (data.status === 'error' || data.status === 'not_found') {
-        throw new Error(`Audio generation failed: ${data.status}`)
-      }
-
-      // Still generating, wait and retry
+      // 404 means not generated yet; wait and retry
       await new Promise((r) => setTimeout(r, pollIntervalMs))
-    } catch (e: any) {
-      console.error('[waitForAudioReady] Error checking status:', e?.message)
-      throw e
+    } catch (e) {
+      // Network hiccup; brief backoff and retry
+      await new Promise((r) => setTimeout(r, pollIntervalMs))
     }
   }
-
-  throw new Error(`Audio not ready after ${maxWaitMs}ms`)
 }
 
 // No audio fallbacks; require valid stream/URL from backend
@@ -105,21 +100,18 @@ export function useAudioController(): AudioController {
     setStatus('loading')
     console.log('[useAudioController] Loading audio from:', url)
     audio.pause()
-    audio.src = url
-    
-    // If statusUrl provided, wait for backend to signal audio is ready
-    if (statusUrl) {
-      console.log('[useAudioController] Waiting for audio to be ready via:', statusUrl)
-      try {
-        await waitForAudioReady(statusUrl)
-        console.log('[useAudioController] Audio is ready, starting playback')
-      } catch (e: any) {
-        console.error('[useAudioController] Audio never became ready:', e?.message)
-        setStatus('error')
-        setError(e?.message || 'Audio generation timeout')
-        return
-      }
+    // Wait until the backend serves the audio file (poll the same URL)
+    try {
+      await waitForAudioAvailable(url)
+      console.log('[useAudioController] Audio is ready, starting playback')
+    } catch (e: any) {
+      console.error('[useAudioController] Audio never became ready:', e?.message)
+      setStatus('error')
+      setError(e?.message || 'Audio generation timeout')
+      return
     }
+
+    audio.src = url
 
     // Try to play
     try {

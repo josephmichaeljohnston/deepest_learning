@@ -30,6 +30,7 @@ export async function fetchStepFromBackend(
   const data = await res.json()
   console.log('[fetchStepFromBackend] Response data:', data)
   const text: string = data?.text || `Slide ${pageNumber}`
+  const question: string | undefined = data?.question
   // Estimate speaking time based on word count (min 4s, max 15s)
   const words = text.split(/\s+/).filter(Boolean).length
   const estimatedMs = Math.min(15000, Math.max(4000, Math.ceil((words / 2.5) * 1000)))
@@ -41,6 +42,7 @@ export async function fetchStepFromBackend(
   return {
     page: pageNumber,
     transcript: text,
+    question,
     ttsText: text,
     audioUrl,
     audioStatusUrl,

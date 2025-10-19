@@ -8,7 +8,6 @@ import InlinePromptPanel, { InlinePromptPanelHandle } from '@/components/InlineP
 import DevControlsSidebar from '@/components/DevControlsSidebar'
 import { useAgentController } from '@/lib/agent/useAgentController'
 import type { AgentSessionConfig } from '@/lib/agent/types'
-import { BACKEND_URL } from '@/lib/config'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,24 +73,6 @@ function ViewerPageInner() {
 
     // Use the API endpoint; ensure filename is URL-encoded for safe path usage
     setPdfUrl(`/api/pdf/${encodeURIComponent(filename)}`)
-    
-    // Check backend connectivity
-    const checkBackend = async () => {
-      try {
-        const res = await fetch(`${BACKEND_URL}/health`)
-        if (!res.ok) {
-          console.warn('[ViewerPage] Backend health check failed')
-          setLoadError('Backend disconnected. Redirecting to upload...')
-          setTimeout(() => router.push('/'), 2000)
-        }
-      } catch (e) {
-        console.error('[ViewerPage] Backend connection failed:', e)
-        setLoadError('Backend disconnected. Redirecting to upload...')
-        setTimeout(() => router.push('/'), 2000)
-      }
-    }
-    
-    checkBackend()
   }, [filename, lectureId, router])
 
   const handlePageChange = (current: number, total: number) => {
@@ -107,8 +88,11 @@ function ViewerPageInner() {
 
   const handleDocumentLoadError = (error: Error) => {
     console.error('Viewer load error:', error)
-    setLoadError('Failed to load from server')
-    // No local fallback: require server to serve the PDF
+    setLoadError('Failed to load PDF. Backend may be unavailable.')
+    // Redirect after a delay so user sees the error message
+    setTimeout(() => {
+      router.push('/')
+    }, 3000)
   }
 
   // Programmatic control functions (using carousel ref)

@@ -45,6 +45,7 @@ export function useAgentController(
   
   const loadingNextRef = useRef(false)
   const pendingNav = useRef<Promise<void> | null>(null)
+  const pendingNextPageRef = useRef<number | null>(null)
 
   const navigateTo = useCallback(async (page: number) => {
     const go = async () => {
@@ -134,16 +135,35 @@ export function useAgentController(
   )
 
   const resume = useCallback(() => {
-    audio.resume()
     // If a post-slide prompt was shown, continue to the next step
-    if (nextAfterPromptRef.current && pendingNextIndexRef.current != null) {
-      const idx = pendingNextIndexRef.current
-      nextAfterPromptRef.current = false
-      pendingNextIndexRef.current = null
-      skipTo(idx)
-      return
-    }
-    setState((s) => ({ ...s, status: 'playing' }))
+    (async () => {
+      if (nextAfterPromptRef.current && pendingNextPageRef.current != null) {
+        const page = pendingNextPageRef.current
+        nextAfterPromptRef.current = false
+        pendingNextPageRef.current = null
+        try {
+          const lectureId = configRef.current.lectureId
+          if (!lectureId) throw new Error('lectureId required')
+          const nextStep = await fetchStepFromBackend(
+            typeof lectureId === 'number' ? lectureId : parseInt(String(lectureId)),
+            page
+          )
+          // Append and play
+          setState((s) => ({
+            ...s,
+            steps: [...s.steps, nextStep],
+            currentStepIndex: s.currentStepIndex + 1,
+          }))
+          await playStep(nextStep)
+        } catch (e) {
+          console.error('[agent.resume] Failed to fetch/play next step:', e)
+        }
+        return
+      }
+
+      audio.resume()
+      setState((s) => ({ ...s, status: 'playing' }))
+    })()
   }, [audio, skipTo])
 
   const stop = useCallback(() => {
@@ -180,28 +200,36 @@ export function useAgentController(
           if (isAdvancingRef.current) return
           
           isAdvancingRef.current = true
-          console.log('[AudioMonitor] Audio finished, showing prompt')
-          
+          console.log('[AudioMonitor] Audio finished, prompting user')
+
           ;(async () => {
-            // Pause and show question
-            try { pause() } catch (e) { console.error('[AudioMonitor] Pause error:', e) }
+            // Pause and show question panel
             try {
-              postSlidePromptRef.current?.('Do you understand?')
-            } catch (e) { console.error('[AudioMonitor] Prompt callback error:', e) }
-            
-            // Load next page if available
+              pause()
+            } catch (e) {
+              console.error('[AudioMonitor] Pause error:', e)
+            }
+
+            try {
+              const q = state.steps[state.currentStepIndex]?.question
+              postSlidePromptRef.current?.(q ?? 'Do you understand?')
+            } catch (e) {
+              console.error('[AudioMonitor] Prompt callback error:', e)
+            }
+
+            // Prefetch next page if available so resume is fast
             const currentPage = state.steps[state.currentStepIndex]?.page ?? 1
             const nextPage = currentPage + 1
             const { totalPages } = configRef.current
-            
+
             console.log('[AudioMonitor] Current page:', currentPage, 'Next page:', nextPage, 'Total pages:', totalPages)
-            
+
             if (nextPage <= totalPages) {
               try {
                 loadingNextRef.current = true
                 const lectureId = configRef.current.lectureId
                 if (!lectureId) throw new Error('lectureId required')
-                console.log('[AudioMonitor] Loading next step for page:', nextPage)
+                console.log('[AudioMonitor] Prefetching next step for page:', nextPage)
                 const nextStep = await fetchStepFromBackend(
                   typeof lectureId === 'number' ? lectureId : parseInt(String(lectureId)),
                   nextPage
@@ -214,8 +242,8 @@ export function useAgentController(
                 nextAfterPromptRef.current = true
                 pendingNextIndexRef.current = nextIndex
               } catch (e) {
-                console.error('[AudioMonitor] Failed to load next step:', e)
-                stop()
+                console.error('[AudioMonitor] Failed to prefetch next step:', e)
+                // don't stop the whole lecture; let the user continue manually
               } finally {
                 loadingNextRef.current = false
               }
